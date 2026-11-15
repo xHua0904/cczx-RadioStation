@@ -4,8 +4,8 @@
   <parent>
     <groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-parent</artifactId><version>3.5.7</version><relativePath/>
   </parent>
-  <groupId>com.cczxcsc</groupId><artifactId>cczx-RadioStion</artifactId><version>1.0.0</version>
-  <name>cczx-RadioStion</name>
+  <groupId>com.cczxcsc</groupId><artifactId>cczx-RadioStation</artifactId><version>1.0.0</version>
+  <name>cczx-RadioStation</name>
   <properties><java.version>21</java.version><kotlin.version>2.1.21</kotlin.version><project.build.sourceEncoding>UTF-8</project.build.sourceEncoding></properties>
   <dependencies>
     <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-web</artifactId></dependency>
@@ -24,7 +24,7 @@
   </dependencies>
   <build>
     <sourceDirectory>${project.basedir}/src/main/kotlin</sourceDirectory><testSourceDirectory>${project.basedir}/src/test/kotlin</testSourceDirectory>
-    <finalName>cczx-RadioStion</finalName>
+    <finalName>cczx-RadioStation</finalName>
     <plugins>
       <plugin><groupId>org.springframework.boot</groupId><artifactId>spring-boot-maven-plugin</artifactId></plugin>
       <plugin>

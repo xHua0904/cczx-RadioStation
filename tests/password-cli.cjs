@@ -8,7 +8,7 @@ const net = require('node:net');
 const root = path.resolve(__dirname, '..');
 const run = path.join(root, 'target', 'test-runtime', 'password-' + Date.now());
 const storage = path.join(run, 'data');
-const jar = path.join(root, 'target', 'cczx-RadioStion.jar');
+const jar = path.join(root, 'target', 'cczx-RadioStation.jar');
 const config = ['--app.storage=sqlite', '--spring.profiles.active=', '--spring.flyway.enabled=false', '--spring.datasource.driver-class-name=org.sqlite.JDBC', '--spring.datasource.url=jdbc:sqlite:' + path.join(storage, 'test.db'), '--app.data-dir=' + storage, '--app.admin-password='];
 const docs = ['PROJECT.md', 'README.md'];
 const content = '# 用户手动维护的项目说明\n默认密码：admin\n不要自动修改此文件。\n';

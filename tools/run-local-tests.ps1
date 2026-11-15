@@ -1,4 +1,4 @@
-﻿param([switch]$SkipCompile)
+param([switch]$SkipCompile)
 $ErrorActionPreference = 'Stop'
 Set-Location -LiteralPath (Split-Path -Parent $PSScriptRoot)
 if (-not $SkipCompile) {
@@ -9,7 +9,7 @@ $taskRoot = (Get-Location).Path
 New-Item -ItemType Directory -Path 'target/test-runner' -Force | Out-Null
 New-Item -ItemType Directory -Path 'target/test-runner/lib' -Force | Out-Null
 Add-Type -AssemblyName System.IO.Compression.FileSystem
-$taskArchive = [IO.Compression.ZipFile]::OpenRead((Join-Path $taskRoot 'target/cczx-RadioStion.jar'))
+$taskArchive = [IO.Compression.ZipFile]::OpenRead((Join-Path $taskRoot 'target/cczx-RadioStation.jar'))
 try {
     foreach ($taskEntry in $taskArchive.Entries) {
         if ($taskEntry.FullName.StartsWith('BOOT-INF/lib/') -and $taskEntry.FullName.EndsWith('.jar')) {

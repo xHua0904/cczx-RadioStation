@@ -96,7 +96,7 @@ async function main() {
   await mkdir(run, { recursive: true }); await mkdir(profile, { recursive: true });
   const port = await freePort(); base = 'http://127.0.0.1:' + port;
   let javaLog = '', browserLog = '';
-  java = spawn('java', ['-jar', path.join(root, 'target', 'cczx-RadioStion.jar'), '--server.port=' + port, '--app.storage=sqlite', '--spring.profiles.active=', '--spring.flyway.enabled=false', '--spring.datasource.driver-class-name=org.sqlite.JDBC', '--spring.datasource.url=jdbc:sqlite:' + path.join(run, 'test.db'), '--app.data-dir=' + run, '--app.admin-password='], { cwd: root, windowsHide: true, env: { ...process.env, DATA_DIR: run } });
+  java = spawn('java', ['-jar', path.join(root, 'target', 'cczx-RadioStation.jar'), '--server.port=' + port, '--app.storage=sqlite', '--spring.profiles.active=', '--spring.flyway.enabled=false', '--spring.datasource.driver-class-name=org.sqlite.JDBC', '--spring.datasource.url=jdbc:sqlite:' + path.join(run, 'test.db'), '--app.data-dir=' + run, '--app.admin-password='], { cwd: root, windowsHide: true, env: { ...process.env, DATA_DIR: run } });
   java.stdout.on('data', data => { javaLog += data; }); java.stderr.on('data', data => { javaLog += data; });
   java.on('error', error => { javaLog += error.message; });
   try { await until(async () => (await fetch(base + '/api/health')).ok, '测试服务启动', 45000); }

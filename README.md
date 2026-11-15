@@ -1,4 +1,4 @@
-# cczx-RadioStion
+# cczx-RadioStation
 
 校园广播投稿系统，后端使用 Kotlin + Spring Boot，默认 SQLite，也支持 PostgreSQL。公开项目、API、Android 和部署说明集中在本文件。默认管理员密码为 `admin`，使用 `--show-password` 查询当前密码。应用不会生成或改写 `.md` 文件。
 
@@ -7,7 +7,7 @@
 已有构建好的 jar 时，不需要启动 IDEA，只需安装 JDK 21 或更高版本。在项目根目录打开 PowerShell，运行：
 
 ```powershell
-java -jar target/cczx-RadioStion.jar
+java -jar target/cczx-RadioStation.jar
 ```
 
 请从项目根目录执行，以继续使用现有 `data/broadcast.db`。启动后访问 `http://127.0.0.1:8000/`，停止按 `Ctrl+C`。直接运行 jar 不会自动读取 `.env`，数据库配置应设置为进程环境变量；需要自动读取 `.env` 时使用后面的 PowerShell 代码。
@@ -17,7 +17,7 @@ java -jar target/cczx-RadioStion.jar
 1. 使用 `File → Open` 打开本项目的 `pom.xml`，作为 Maven 项目导入。
 2. 在 `Project Structure → Project` 将 SDK 设为 JDK 21 或更高版本，语言级别设为 21；Maven Runner 的 JRE 使用项目 SDK。
 3. 在 Maven 面板执行 `Reload All Maven Projects`，然后运行 Maven 目标 `-DskipTests package`。
-4. 构建结果是 `target/cczx-RadioStion.jar`。也可打开 `src/main/kotlin/com/cczxcsc/Application.kt`，运行 `com.cczxcsc.ApplicationKt` 调试，运行配置的工作目录设为项目根目录。
+4. 构建结果是 `target/cczx-RadioStation.jar`。也可打开 `src/main/kotlin/com/cczxcsc/Application.kt`，运行 `com.cczxcsc.ApplicationKt` 调试，运行配置的工作目录设为项目根目录。
 
 已有本地缓存时，可在 IDEA Terminal 执行 `.\mvnw.cmd -o -B '-DskipTests' package`，使用项目内 Maven 缓存；首次构建需联网下载依赖。若直接使用 IDEA 的 Maven 面板离线构建，将 Maven 的 Local repository 指向项目内 `.tools/repository`。
 
@@ -29,7 +29,7 @@ java -jar target/cczx-RadioStion.jar
 $ErrorActionPreference = 'Stop'
 $taskRoot = (Get-Location).Path
 if (-not (Test-Path -LiteralPath (Join-Path $taskRoot 'pom.xml'))) {
-    throw '请先进入 cczx-RadioStion 项目根目录。'
+    throw '请先进入 cczx-RadioStation 项目根目录。'
 }
 
 # 默认启动网站；查询密码时改为 @('--show-password')，恢复 admin 时改为 @('--reset-password')。
@@ -51,7 +51,7 @@ if (Test-Path -LiteralPath '.env') {
 if (-not (Get-Command java -ErrorAction SilentlyContinue)) {
     throw '请安装 JDK 21 或更高版本，并将 java 加入 PATH。'
 }
-$taskJar = Join-Path $taskRoot 'target/cczx-RadioStion.jar'
+$taskJar = Join-Path $taskRoot 'target/cczx-RadioStation.jar'
 $taskSources = @(Get-Item -LiteralPath 'pom.xml') + @(Get-ChildItem -LiteralPath 'src/main' -File -Recurse)
 $taskNeedsBuild = -not (Test-Path -LiteralPath $taskJar)
 if (-not $taskNeedsBuild) {
@@ -99,7 +99,7 @@ target/                                     构建结果与临时测试产物
 .tools/                                     Maven 及依赖缓存
 ```
 
-Maven 坐标为 `com.cczxcsc:cczx-RadioStion:1.0.0`。源码按接口、业务服务、数据访问分层；Android 客户端调用 HTTP API，不运行 Spring Boot，也不直接连接数据库。
+Maven 坐标为 `com.cczxcsc:cczx-RadioStation:1.0.0`。源码按接口、业务服务、数据访问分层；Android 客户端调用 HTTP API，不运行 Spring Boot，也不直接连接数据库。
 
 ## 启动与配置
 
@@ -107,11 +107,11 @@ Maven 坐标为 `com.cczxcsc:cczx-RadioStion:1.0.0`。源码按接口、业务�
 
 ### jar 启动（无需 IDEA）
 
-已有 jar 时无需启动 IDEA，在项目根目录执行 `java -jar target/cczx-RadioStion.jar`。IDEA 中选择 JDK 21+、重新加载 Maven，并执行 `-DskipTests package`，即可生成可执行 jar。项目顶层目录名为 `cczx-RadioStion`，工作目录设为项目根目录。
+已有 jar 时无需启动 IDEA，在项目根目录执行 `java -jar target/cczx-RadioStation.jar`。IDEA 中选择 JDK 21+、重新加载 Maven，并执行 `-DskipTests package`，即可生成可执行 jar。项目顶层目录名为 `cczx-RadioStation`，工作目录设为项目根目录。
 
 ```powershell
 .\mvnw.cmd -B '-DskipTests' package
-java -jar target/cczx-RadioStion.jar
+java -jar target/cczx-RadioStation.jar
 ```
 
 已有 jar 时直接执行上面的 Java 命令即可，无需重新构建。启动后访问 `http://127.0.0.1:8000/`，后台为 `http://127.0.0.1:8000/admin`，按 `Ctrl+C` 停止。请从项目根目录运行，以使用该目录下的正式数据库；更新源码后需重新打包，再启动新 jar。
@@ -128,11 +128,11 @@ java -jar target/cczx-RadioStion.jar
 
 ```powershell
 # 查询当前管理员密码，打印后退出；必须使用网站相同的数据库和 DATA_DIR
-java -jar target/cczx-RadioStion.jar --show-password
+java -jar target/cczx-RadioStation.jar --show-password
 # 恢复默认密码 admin，注销全部登录会话，然后退出
-java -jar target/cczx-RadioStion.jar --reset-password
+java -jar target/cczx-RadioStation.jar --reset-password
 # 添加 20 条带「演示数据」审核备注的稿件，然后退出
-java -jar target/cczx-RadioStion.jar --demo-data
+java -jar target/cczx-RadioStation.jar --demo-data
 ```
 
 ## 密码查询与默认值
@@ -141,7 +141,7 @@ java -jar target/cczx-RadioStion.jar --demo-data
 
 ```powershell
 # 本机查询当前密码，查询完成后退出，不启动 HTTP 服务
-java -jar target/cczx-RadioStion.jar --show-password
+java -jar target/cczx-RadioStation.jar --show-password
 ```
 
 命令必须从项目根目录执行，并使用与网站相同的数据库配置和 `DATA_DIR`。新数据库尚未创建时，查询会先初始化默认账号。正常启动不会打印密码；管理 API 不提供密码查询接口。
@@ -291,7 +291,7 @@ PostgreSQL 表结构由 Flyway 管理。容器中用 `docker compose exec app ja
 ```powershell
 python tools/export_legacy.py
 # .env 已配置为 PostgreSQL；导入后退出
-java -jar target/cczx-RadioStion.jar --import-legacy=data/legacy-export.json
+java -jar target/cczx-RadioStation.jar --import-legacy=data/legacy-export.json
 ```
 
 导出只读访问旧库，导入保留编号、正文、审核信息、密码哈希，恢复编号计数，并注销旧会话。导出文件包含密码哈希，导入完成后应删除。旧库升级前会自动备份。
@@ -325,7 +325,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/cleanup.ps1
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File tools/cleanup.ps1 -ResetData
-java -jar target/cczx-RadioStion.jar --reset-password
+java -jar target/cczx-RadioStation.jar --reset-password
 ```
 
 `-ResetData` 仅清理项目内默认 `data/`，不处理外部 PostgreSQL 或自定义数据目录。

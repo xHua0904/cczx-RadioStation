@@ -3,7 +3,7 @@ server:
   max-http-request-header-size: 16KB
 spring:
   application:
-    name: cczx-RadioStion
+    name: cczx-RadioStation
   datasource:
     url: ${DB_URL:jdbc:sqlite:${DATA_DIR:./data}/broadcast.db}
     driver-class-name: org.sqlite.JDBC
