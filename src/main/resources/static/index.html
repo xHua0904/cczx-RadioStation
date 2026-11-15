@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>投稿 · 长春中学广播站</title>
+<meta name="description" content="长春中学广播站在线投稿与新媒体中心公告。">
+<link rel="icon" href="img/favicon.png">
+<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/workspace.css">
+</head>
+<body>
+<a class="skip" href="#form">跳到投稿表单</a>
+
+<header class="site-head">
+  <div class="wrap head-inner">
+    <a class="brand" href="index.html">
+      <img src="img/logo.png" alt="长春中学校徽">
+      <span class="brand-text"><strong>校园广播站</strong><em>投稿中心</em></span>
+    </a>
+    <nav class="head-nav" aria-label="导航">
+      <a class="ghost-link" href="admin.html">新媒体中心</a>
+    </nav>
+  </div>
+</header>
+
+<main class="public-main">
+  <div class="page-head">
+    <h1>长春中学 · 广播站在线投稿</h1>
+    <p>记录校园生活，分享你的声音。</p>
+  </div>
+
+  <div class="public-layout">
+  <div class="card form-card" id="form">
+    <h2 class="form-heading">提交稿件</h2>
+    <form id="submitForm" novalidate>
+      <div class="alert" id="formAlert" role="alert"></div>
+
+      <div class="row-2">
+        <div class="field" data-field="author">
+          <label for="author">姓名<span class="req">*</span></label>
+          <input class="input" id="author" name="author" type="text" maxlength="20" placeholder="真实姓名" autocomplete="name">
+        </div>
+        <div class="field" data-field="class_name">
+          <label for="class_name">班级<span class="req">*</span></label>
+          <input class="input" id="class_name" name="class_name" type="text" maxlength="30" placeholder="">
+        </div>
+      </div>
+
+      <div class="field" data-field="content">
+        <label for="content">投稿内容<span class="req">*</span></label>
+        <textarea class="textarea" id="content" name="content" maxlength="100" placeholder="写下你的稿件内容，最多 100 字。" required></textarea>
+        <div class="field-foot">
+          <span>内容不能为空，最多 100 字。</span>
+          <span class="counter" id="contentCounter">0 / 100</span>
+        </div>
+      </div>
+
+      <div class="field" data-field="contact">
+        <label for="contact">联系方式<span class="opt">选填</span></label>
+        <input class="input" id="contact" name="contact" type="text" maxlength="50" placeholder="微信 / QQ / 手机号，便于编辑联系你">
+      </div>
+
+      <div class="submit-row">
+        <p class="form-tip">提交即表示同意广播站的编辑和播出安排。</p>
+        <button class="btn btn-primary" type="submit" id="submitBtn" disabled>
+          <span id="submitLabel">提交稿件</span>
+        </button>
+      </div>
+    </form>
+
+    <div class="success" id="successPanel">
+      <div class="seal" aria-hidden="true">✓</div>
+      <h3>提交成功</h3>
+      <p>你的申请编号：<strong id="submissionCode"></strong></p>
+      <p>广播部会尽快查看，需要补充信息时会通过你留下的方式联系你。</p>
+      <div class="actions">
+        <button class="btn btn-ghost btn-sm" type="button" id="againBtn">再投一篇</button>
+      </div>
+    </div>
+  </div>
+  <aside class="announcement-board" aria-labelledby="announcementHeading">
+    <div class="board-heading"><div><span class="eyebrow">新媒体中心</span><h2 id="announcementHeading">公告栏</h2></div><span class="board-count" id="announcementCount">—</span></div>
+    <div id="announcementFeed" class="announcement-feed" aria-live="polite"><p class="empty-state">正在加载公告…</p></div>
+    <button id="announcementRetry" class="btn btn-ghost btn-sm" type="button" hidden>重新加载公告</button>
+  </aside>
+  </div>
+</main>
+
+<footer class="site-foot">
+  <div class="wrap foot-inner">
+    <span>长春中学 · 新媒体中心</span>
+    <span>问题请联系广播部</span>
+  </div>
+</footer>
+
+<script src="js/submit.js"></script>
+</body>
+</html>

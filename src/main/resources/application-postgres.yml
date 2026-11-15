@@ -1,0 +1,14 @@
+spring:
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/radio_submissions}
+    username: ${DB_USER:radio}
+    password: ${DB_PASSWORD:}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      connection-init-sql: SELECT 1
+  flyway:
+    enabled: true
+    locations: classpath:db/postgres
+app:
+  storage: postgres

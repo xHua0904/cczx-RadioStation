@@ -1,0 +1,35 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: radio_submissions
+      POSTGRES_USER: ${DB_USER:-radio}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?请先在 .env 设置 DB_PASSWORD}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d radio_submissions"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+  app:
+    profiles: ["full"]
+    build: .
+    environment:
+      SPRING_PROFILES_ACTIVE: postgres
+      DB_URL: jdbc:postgresql://postgres:5432/radio_submissions
+      DB_USER: ${DB_USER:-radio}
+      DB_PASSWORD: ${DB_PASSWORD:?请先在 .env 设置 DB_PASSWORD}
+      BROADCAST_ADMIN_PASSWORD: ${BROADCAST_ADMIN_PASSWORD:-}
+    ports:
+      - "8000:8000"
+    volumes:
+      - app-data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+volumes:
+  postgres-data:
+  app-data:

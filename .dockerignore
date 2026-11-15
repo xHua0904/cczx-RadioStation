@@ -1,0 +1,11 @@
+.tools
+target
+.idea
+.git
+.env
+data
+legacy
+shots
+tests
+PROJECT.md
+.project-info-*.md

@@ -1,0 +1,23 @@
+server:
+  port: ${PORT:8000}
+  max-http-request-header-size: 16KB
+spring:
+  application:
+    name: cczx-RadioStion
+  datasource:
+    url: ${DB_URL:jdbc:sqlite:${DATA_DIR:./data}/broadcast.db}
+    driver-class-name: org.sqlite.JDBC
+    hikari:
+      maximum-pool-size: 1
+      connection-init-sql: PRAGMA busy_timeout=15000
+  flyway:
+    enabled: false
+  jackson:
+    property-naming-strategy: SNAKE_CASE
+  mvc:
+    problemdetails:
+      enabled: false
+app:
+  storage: sqlite
+  data-dir: ${DATA_DIR:./data}
+  admin-password: ${BROADCAST_ADMIN_PASSWORD:admin}

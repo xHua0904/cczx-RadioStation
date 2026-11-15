@@ -1,0 +1,23 @@
+# 正式数据、密码与本机环境
+/data/
+/PROJECT.md
+/.project-info-*.md
+.env
+.env.*
+!.env.example
+
+# 构建产物、缓存、IDE 配置与旧代码归档
+/target/
+/.tools/
+/.idea/
+/legacy/
+/shots/
+/*.jar
+*.db
+*.db-wal
+*.db-shm
+*.log
+__pycache__/
+*.pyc
+.DS_Store
+Thumbs.db
