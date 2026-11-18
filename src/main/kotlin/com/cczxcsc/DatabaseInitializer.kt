@@ -23,7 +23,7 @@ class DatabaseInitializer(
     override fun afterPropertiesSet() {
         val oldTable = jdbc.queryForObject("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='submissions'", Int::class.java) == 1
         val columns = if (oldTable) jdbc.queryForList("PRAGMA table_info(submissions)").map { it["name"].toString() }.toSet() else emptySet()
-        val addedColumns = listOf("song_name", "artist", "song_url", "period", "broadcast_time")
+        val addedColumns = listOf("song_name", "artist", "song_url", "period", "broadcast_time", "reviewed_by", "scheduled_by", "updated_by")
         if (oldTable && addedColumns.any { it !in columns }) {
             // VACUUM INTO 会包含 WAL 中已提交的数据，升级前留下完整备份。
             Files.createDirectories(Path.of(dataDir))
@@ -48,9 +48,20 @@ class DatabaseInitializer(
                 }
             }
             jdbc.execute(ConnectionCallback<Unit> { connection -> ScriptUtils.executeSqlScript(connection, ClassPathResource("db/sqlite/V3__weekly_submissions_and_announcements.sql")) })
+            jdbc.execute(ConnectionCallback<Unit> { connection -> ScriptUtils.executeSqlScript(connection, ClassPathResource("db/sqlite/V4__accounts_and_audit.sql")) })
+            val sessionColumns = jdbc.queryForList("PRAGMA table_info(sessions)").map { it["name"].toString() }
+            if ("username" !in sessionColumns) {
+                jdbc.execute("ALTER TABLE sessions ADD COLUMN username TEXT NOT NULL DEFAULT ''")
+                jdbc.update("DELETE FROM sessions")
+            }
+            val messageColumns = jdbc.queryForList("PRAGMA table_info(announcements)").map { it["name"].toString() }
+            for (name in listOf("updated_by", "updated_at")) {
+                if (name !in messageColumns) jdbc.execute("ALTER TABLE announcements ADD COLUMN $name TEXT NOT NULL DEFAULT ''")
+            }
             jdbc.update("INSERT OR IGNORE INTO schema_versions(version, applied_at) VALUES(1, ?)", nowIso())
             jdbc.update("INSERT OR IGNORE INTO schema_versions(version, applied_at) VALUES(2, ?)", nowIso())
             jdbc.update("INSERT OR IGNORE INTO schema_versions(version, applied_at) VALUES(3, ?)", nowIso())
+            jdbc.update("INSERT OR IGNORE INTO schema_versions(version, applied_at) VALUES(4, ?)", nowIso())
         }
     }
 }

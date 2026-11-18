@@ -11,7 +11,7 @@ const storage = path.join(run, 'data');
 const jar = path.join(root, 'target', 'cczx-RadioStation.jar');
 const config = ['--app.storage=sqlite', '--spring.profiles.active=', '--spring.flyway.enabled=false', '--spring.datasource.driver-class-name=org.sqlite.JDBC', '--spring.datasource.url=jdbc:sqlite:' + path.join(storage, 'test.db'), '--app.data-dir=' + storage, '--app.admin-password='];
 const docs = ['PROJECT.md', 'README.md'];
-const content = '# 用户手动维护的项目说明\n默认密码：admin\n不要自动修改此文件。\n';
+const content = '# 用户手动维护的项目说明\n默认密码：cczx123456\n不要自动修改此文件。\n';
 let server;
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -65,23 +65,39 @@ async function stopServer() {
 async function main() {
   await mkdir(run, { recursive: true });
   for (const doc of docs) await writeFile(path.join(run, doc), content);
-  assert.match(await command(['--show-password']), /管理员密码：admin/);
+  assert.match(await command(['--show-password']), /账号 新媒体中心 的密码：cczx123456/);
+  assert.match(await command(['--add-account=网络部']), /已添加账号：网络部/);
+  assert.match(await command(['--add-account=科创社']), /已添加账号：科创社/);
+  assert.match(await command(['--list-accounts']), /网络部/);
+  assert.match(await command(['--show-password', '--account=网络部']), /账号 网络部 的密码：cczx123456/);
+  await command(['--add-account=网络部'], false);
+  await command(['--add-account'], false);
+  await command(['--show-password', '--add-account=多余账号'], false);
   const base = await startServer();
-  const login = await request(base, '/api/admin/login', { password: 'admin' }); assert.equal(login.status, 200);
-  assert.equal((await request(base, '/api/admin/password', { old_password: 'admin', new_password: 'Cli改密123' }, login.data.token)).status, 200);
+  const login = await request(base, '/api/admin/login', { username: '新媒体中心', password: 'cczx123456' }); assert.equal(login.status, 200);
+  assert.equal((await request(base, '/api/admin/password', { old_password: 'cczx123456', new_password: 'Cli改密123' }, login.data.token)).status, 200);
   assert.equal((await request(base, '/api/admin/stats', undefined, login.data.token)).status, 401);
-  assert.equal(server.output.includes('管理员密码：'), false);
+  assert.equal(server.output.includes('的密码：'), false);
+  const network = await request(base, '/api/admin/login', { username: '网络部', password: 'cczx123456' });
+  const science = await request(base, '/api/admin/login', { username: '科创社', password: 'cczx123456' });
+  assert.equal(network.status, 200); assert.equal(science.status, 200);
+  assert.equal((await request(base, '/api/admin/password', { old_password: 'cczx123456', new_password: 'NetworkChanged123', username: '科创社' }, network.data.token)).status, 200);
+  assert.equal((await request(base, '/api/admin/stats', undefined, network.data.token)).status, 401);
+  assert.equal((await request(base, '/api/admin/me', undefined, science.data.token)).data.username, '科创社');
   await stopServer();
-  assert.match(await command(['--show-password', '--logging.level.root=ERROR', '--spring.main.banner-mode=off']), /管理员密码：Cli改密123/);
+  assert.match(await command(['--show-password', '--logging.level.root=ERROR', '--spring.main.banner-mode=off']), /账号 新媒体中心 的密码：Cli改密123/);
   await command(['--show-password', '--reset-password'], false);
-  assert.match(await command(['--show-password']), /管理员密码：Cli改密123/);
+  assert.match(await command(['--show-password']), /账号 新媒体中心 的密码：Cli改密123/);
+  assert.match(await command(['--show-password', '--account=网络部']), /账号 网络部 的密码：NetworkChanged123/);
+  await command(['--reset-password', '--account=网络部']);
+  assert.match(await command(['--show-password', '--account=网络部']), /账号 网络部 的密码：cczx123456/);
   await command(['--reset-password']);
-  assert.match(await command(['--show-password']), /管理员密码：admin/);
+  assert.match(await command(['--show-password']), /账号 新媒体中心 的密码：cczx123456/);
   const restarted = await startServer();
-  assert.equal((await request(restarted, '/api/admin/login', { password: 'admin' })).status, 200);
+  assert.equal((await request(restarted, '/api/admin/login', { username: '新媒体中心', password: 'cczx123456' })).status, 200);
   assert.equal((await request(restarted, '/api/meta')).data.total, 0);
   for (const doc of docs) assert.equal(await readFile(path.join(run, doc), 'utf8'), content);
-  console.log('PASS jar 密码命令：默认 admin、查询改后密码、重置、命令冲突保护、手动文档不变、无投稿数据');
+  console.log('PASS jar 账号与密码命令：默认 cczx123456、查询改后密码、重置、命令冲突保护、手动文档不变、无投稿数据');
 }
 
 main().catch(error => { console.error(error); process.exitCode = 1; }).finally(stopServer);

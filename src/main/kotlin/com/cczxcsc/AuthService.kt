@@ -9,7 +9,7 @@ import java.time.OffsetDateTime
 @Service
 class AuthService(
     private val jdbc: JdbcTemplate, private val transactions: TransactionTemplate,
-    @Value("\${app.admin-password:admin}") private val initialPassword: String,
+    @Value("\${app.admin-password:cczx123456}") private val initialPassword: String,
     private val vault: PasswordVault
 ) {
     private val attempts = mutableMapOf<String, MutableList<Long>>()
@@ -17,41 +17,66 @@ class AuthService(
     fun setSetting(key: String, value: String) {
         jdbc.update("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", key, value)
     }
+    private fun account(username: String) = jdbc.queryForList("SELECT * FROM accounts WHERE username=?", username).firstOrNull()
+    private fun name(username: String): String {
+        val cleaned = username.trim()
+        if (cleaned.isEmpty() || cleaned.length > 40 || cleaned.any { it.isISOControl() }) throw ApiError(400, "账号应为 1–40 个字符，不能包含控制字符")
+        return cleaned
+    }
 
     fun initialize() {
-        if (setting("admin_hash") == null) {
-            val password = initialPassword.ifBlank { Passwords.DEFAULT_ADMIN_PASSWORD }
-            require(Passwords.validAdminPassword(password)) { "BROADCAST_ADMIN_PASSWORD 应为 admin 或 6–64 位密码" }
-            transactions.executeWithoutResult {
-                val inserted = jdbc.update("INSERT INTO settings(key,value) VALUES('admin_hash',?) ON CONFLICT(key) DO NOTHING", Passwords.hash(password))
-                if (inserted == 1) { setSetting("admin_password_initial", "1"); setSetting("admin_password_encrypted", vault.encrypt(password)) }
-            }
-        }
-    }
-
-    fun resetPassword() {
-        val password = Passwords.DEFAULT_ADMIN_PASSWORD
         transactions.executeWithoutResult {
-            setSetting("admin_hash", Passwords.hash(password)); setSetting("admin_password_encrypted", vault.encrypt(password))
-            setSetting("admin_password_initial", "1"); jdbc.update("DELETE FROM sessions")
+            if (account(Passwords.DEFAULT_ACCOUNT) == null) {
+                val legacyHash = setting("admin_hash")
+                val legacyDefault = legacyHash != null && Passwords.verify("admin", legacyHash)
+                val hash = if (legacyHash != null && !legacyDefault) legacyHash else Passwords.hash(Passwords.DEFAULT_ADMIN_PASSWORD)
+                val encrypted = if (legacyHash != null && !legacyDefault) setting("admin_password_encrypted").orEmpty() else vault.encrypt(Passwords.DEFAULT_ADMIN_PASSWORD)
+                jdbc.update("INSERT INTO accounts(username,password_hash,password_encrypted,initial_password,created_at) VALUES(?,?,?,?,?) ON CONFLICT(username) DO NOTHING",
+                    Passwords.DEFAULT_ACCOUNT, hash, encrypted, if (legacyHash == null || legacyDefault) 1 else 0, nowIso())
+            }
+            // 旧共用密码迁移为默认账号，历史会话已由表结构升级注销。
+            jdbc.update("DELETE FROM settings WHERE key IN ('admin_hash','admin_password_encrypted','admin_password_initial')")
         }
-        println("管理员密码已重置为默认值 admin，全部登录会话已注销。")
     }
 
-    fun currentPassword(): String {
-        val hash = setting("admin_hash").orEmpty()
-        setting("admin_password_encrypted")?.let { record ->
-            val password = runCatching { vault.decrypt(record) }.getOrNull()
-            if (password != null && Passwords.verify(password, hash)) return password
+    // 仅由本机管理命令调用，网页和 HTTP API 不提供创建账号的入口。
+    fun addAccount(username: String) {
+        val user = name(username)
+        transactions.executeWithoutResult {
+            val inserted = jdbc.update("INSERT INTO accounts(username,password_hash,password_encrypted,initial_password,created_at) VALUES(?,?,?,1,?) ON CONFLICT(username) DO NOTHING",
+                user, Passwords.hash(Passwords.DEFAULT_ADMIN_PASSWORD), vault.encrypt(Passwords.DEFAULT_ADMIN_PASSWORD), nowIso())
+            if (inserted != 1) throw ApiError(409, "账号已存在，已有密码保持不变")
         }
-        // 兼容只有哈希的旧库；未知旧密码无法从哈希还原，也不会被默认密码覆盖。
-        listOf(Passwords.DEFAULT_ADMIN_PASSWORD, initialPassword).distinct().forEach { password ->
-            if (password.isNotEmpty() && Passwords.verify(password, hash)) return password
-        }
-        throw IllegalStateException("当前密码无法查询：旧库仅有哈希，或密码查询密钥缺失。可使用 --reset-password 恢复默认密码 admin。")
+        println("已添加账号：$user；默认密码：${Passwords.DEFAULT_ADMIN_PASSWORD}")
     }
 
-    fun login(password: String, ip: String): Map<String, Any> {
+    fun listAccounts(): List<String> = jdbc.queryForList("SELECT username FROM accounts ORDER BY created_at,username", String::class.java)
+
+    fun resetPassword(username: String = Passwords.DEFAULT_ACCOUNT) {
+        val user = name(username)
+        transactions.executeWithoutResult {
+            val updated = jdbc.update("UPDATE accounts SET password_hash=?,password_encrypted=?,initial_password=1 WHERE username=?",
+                Passwords.hash(Passwords.DEFAULT_ADMIN_PASSWORD), vault.encrypt(Passwords.DEFAULT_ADMIN_PASSWORD), user)
+            if (updated != 1) throw ApiError(404, "账号不存在")
+            jdbc.update("DELETE FROM sessions WHERE username=?", user)
+        }
+        println("账号 $user 的密码已重置为 ${Passwords.DEFAULT_ADMIN_PASSWORD}，该账号的登录会话已注销。")
+    }
+
+    fun currentPassword(username: String = Passwords.DEFAULT_ACCOUNT): String {
+        val user = account(name(username)) ?: throw ApiError(404, "账号不存在")
+        val hash = user["password_hash"].toString()
+        val password = runCatching { vault.decrypt(user["password_encrypted"].toString()) }.getOrNull()
+        if (password != null && Passwords.verify(password, hash)) return password
+        // 旧库仅有哈希时只能识别已知默认值，不覆盖用户已修改的密码。
+        listOf(Passwords.DEFAULT_ADMIN_PASSWORD, initialPassword).distinct().forEach {
+            if (it.isNotEmpty() && Passwords.verify(it, hash)) return it
+        }
+        throw IllegalStateException("当前密码无法查询：旧库仅有哈希，或密码查询密钥缺失。可使用 --reset-password --account=账号 恢复默认密码。")
+    }
+
+    fun login(password: String, ip: String, username: String = Passwords.DEFAULT_ACCOUNT): Map<String, Any> {
+        val userName = name(username)
         if (password.length > 64) throw ApiError(400, "密码不能超过 64 位")
         synchronized(attempts) {
             val now = System.currentTimeMillis()
@@ -59,12 +84,13 @@ class AuthService(
             attempts.entries.removeIf { it.value.isEmpty() }
             if ((attempts[ip]?.size ?: 0) >= 8) throw ApiError(429, "密码错误次数过多，请 10 分钟后再试")
         }
-        if (!Passwords.verify(password, setting("admin_hash").orEmpty())) {
+        val user = account(userName)
+        if (!Passwords.verify(password, user?.get("password_hash")?.toString().orEmpty())) {
             synchronized(attempts) {
                 if (attempts.size >= 10_000 && ip !in attempts) attempts.remove(attempts.keys.first())
                 attempts.getOrPut(ip) { mutableListOf() }.add(System.currentTimeMillis())
             }
-            throw ApiError(401, "密码不正确")
+            throw ApiError(401, "账号或密码不正确")
         }
         synchronized(attempts) { attempts.remove(ip) }
         val token = Passwords.token()
@@ -72,28 +98,36 @@ class AuthService(
         val expires = OffsetDateTime.parse(created).plusHours(12).format(java.time.format.DateTimeFormatter.ISO_OFFSET_DATE_TIME)
         transactions.executeWithoutResult {
             jdbc.update("DELETE FROM sessions WHERE expires_at<?", created)
-            jdbc.update("INSERT INTO sessions(token,created_at,expires_at) VALUES(?,?,?)", Passwords.digest(token), created, expires)
+            val inserted = jdbc.update("INSERT INTO sessions(token,created_at,expires_at,username) SELECT ?,?,?,username FROM accounts WHERE username=? AND password_hash=?",
+                Passwords.digest(token), created, expires, userName, user!!["password_hash"])
+            if (inserted != 1) throw ApiError(401, "密码已更新，请重新登录")
         }
-        return mapOf("ok" to true, "token" to token, "expires_at" to expires, "initial_password" to (setting("admin_password_initial") == "1"))
+        return mapOf("ok" to true, "token" to token, "expires_at" to expires, "username" to userName,
+            "initial_password" to ((user!!["initial_password"] as Number).toInt() == 1))
     }
 
     fun requireAdmin(header: String?): String {
         val token = if (header?.startsWith("Bearer ", ignoreCase = true) == true) header.substring(7).trim() else ""
         if (token.isEmpty() || token.length > 256) throw ApiError(401, "请先登录")
         val hash = Passwords.digest(token)
-        val expiry = jdbc.queryForList("SELECT expires_at FROM sessions WHERE token=?", hash).firstOrNull()?.get("expires_at")?.toString()
+        val expiry = jdbc.queryForList("SELECT s.expires_at FROM sessions s JOIN accounts a ON a.username=s.username WHERE s.token=?", hash).firstOrNull()?.get("expires_at")?.toString()
         if (expiry == null || expiry < nowIso()) throw ApiError(401, "登录已过期，请重新登录")
         return hash
     }
 
+    fun username(header: String?): String = jdbc.queryForObject("SELECT username FROM sessions WHERE token=?", String::class.java, requireAdmin(header))!!
     fun logout(header: String?) { jdbc.update("DELETE FROM sessions WHERE token=?", requireAdmin(header)) }
 
-    fun changePassword(old: String, new: String) {
-        if (!Passwords.validAdminPassword(new)) throw ApiError(400, "新密码应为 admin 或 6–64 位密码")
+    fun changePassword(old: String, new: String, username: String = Passwords.DEFAULT_ACCOUNT) {
+        val user = name(username)
+        if (!Passwords.validAdminPassword(new)) throw ApiError(400, "新密码应为 6–64 位")
         transactions.executeWithoutResult {
-            if (!Passwords.verify(old, setting("admin_hash").orEmpty())) throw ApiError(400, "原密码不正确")
-            setSetting("admin_hash", Passwords.hash(new)); setSetting("admin_password_encrypted", vault.encrypt(new))
-            setSetting("admin_password_initial", "0"); jdbc.update("DELETE FROM sessions")
+            val record = account(user) ?: throw ApiError(404, "账号不存在")
+            if (!Passwords.verify(old, record["password_hash"].toString())) throw ApiError(400, "原密码不正确")
+            val updated = jdbc.update("UPDATE accounts SET password_hash=?,password_encrypted=?,initial_password=0 WHERE username=? AND password_hash=?",
+                Passwords.hash(new), vault.encrypt(new), user, record["password_hash"])
+            if (updated != 1) throw ApiError(409, "密码已被修改，请重新登录")
+            jdbc.update("DELETE FROM sessions WHERE username=?", user)
         }
     }
 }

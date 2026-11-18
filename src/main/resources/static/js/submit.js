@@ -50,7 +50,7 @@
         const card = document.createElement("article"); card.className = "announcement-card";
         const tag = document.createElement("span"); tag.className = "message-kind"; tag.textContent = item.kind;
         const title = document.createElement("h3"); title.textContent = item.title;
-        const meta = document.createElement("p"); meta.className = "announcement-meta"; meta.textContent = (item.published_at || item.created_at).slice(0, 10) + " · 新媒体中心";
+        const meta = document.createElement("p"); meta.className = "announcement-meta"; meta.textContent = (item.published_at || item.created_at).slice(0, 10) + " · " + (item.publisher || "新媒体中心");
         const text = document.createElement("p"); text.className = "announcement-content"; text.textContent = item.content;
         card.append(tag, title, meta, text);
         feed.appendChild(card);

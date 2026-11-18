@@ -66,11 +66,11 @@ test("空白和超过一百字的稿件不能提交", async () => {
   assert.equal(p.requests.filter(r => r.url === "/api/submissions").length, 0);
 });
 
-test("公告按块展示日期和固定发布者，内容作为文本呈现", async () => {
-  const p = await page([{ title: "下一期投稿计划", content: "<script>alert(1)</script>", kind: "投稿计划", period: "2026-W46", publisher: "伪造发布者", published_at: "2026-11-15T12:00:00+08:00" }]);
+test("公告按块展示日期和实际发布者，内容作为文本呈现", async () => {
+  const p = await page([{ title: "下一期投稿计划", content: "<script>alert(1)</script>", kind: "投稿计划", period: "2026-W46", publisher: "网络部", published_at: "2026-11-15T12:00:00+08:00" }]);
   const card = p.elements.get("#announcementFeed").children[0];
   assert.equal(card.className, "announcement-card");
-  assert.equal(card.children.find(x => x.className === "announcement-meta").textContent, "2026-11-15 · 新媒体中心");
+  assert.equal(card.children.find(x => x.className === "announcement-meta").textContent, "2026-11-15 · 网络部");
   assert.equal(card.children.find(x => x.className === "announcement-content").textContent, "<script>alert(1)</script>");
 });
 

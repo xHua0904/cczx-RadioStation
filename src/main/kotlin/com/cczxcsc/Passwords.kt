@@ -7,7 +7,8 @@ import javax.crypto.SecretKeyFactory
 import javax.crypto.spec.PBEKeySpec
 
 object Passwords {
-    const val DEFAULT_ADMIN_PASSWORD = "admin"
+    const val DEFAULT_ADMIN_PASSWORD = "cczx123456"
+    const val DEFAULT_ACCOUNT = "新媒体中心"
     fun validAdminPassword(password: String): Boolean = password == DEFAULT_ADMIN_PASSWORD || password.length in 6..64
     private val random = SecureRandom()
     fun token(bytes: Int = 32): String = ByteArray(bytes).also(random::nextBytes).let { Base64.getUrlEncoder().withoutPadding().encodeToString(it) }

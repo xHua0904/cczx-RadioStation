@@ -20,4 +20,4 @@ spring:
 app:
   storage: sqlite
   data-dir: ${DATA_DIR:./data}
-  admin-password: ${BROADCAST_ADMIN_PASSWORD:admin}
+  admin-password: cczx123456

@@ -7,7 +7,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.util.UUID
 
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = ["app.admin-password=TestAdmin123"])
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = ["app.admin-password=cczx123456"])
 class ApiSqliteTest : ApiContract() {
     companion object {
         private val directory = Files.createDirectories(Path.of("target/test-data", UUID.randomUUID().toString())).toAbsolutePath()

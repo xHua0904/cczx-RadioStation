@@ -15,10 +15,10 @@ data class ExportFile(val bytes: ByteArray, val contentType: String, val filenam
 class ExportService {
     fun export(items: List<Submission>, format: String): ExportFile {
         if (format !in setOf("csv", "xlsx")) throw ApiError(400, "导出格式应为 csv 或 xlsx")
-        val headers = listOf("编号", "投稿时间", "投稿人", "班级/部门", "标题", "投稿内容", "联系方式", "状态", "评分", "播出日期", "播出时间", "审核备注", "来源")
+        val headers = listOf("编号", "投稿时间", "投稿人", "班级/部门", "标题", "投稿内容", "联系方式", "状态", "评分", "播出日期", "播出时间", "审核备注", "来源", "审稿人", "排期人", "最近操作人")
         val rows: List<List<Any?>> = listOf(headers) + items.map {
             listOf(it.code, it.createdAt.replace('T', ' ').take(16), it.author, it.className, it.title,
-                it.content, it.contact, it.status, it.score, it.broadcastDate, it.broadcastTime, it.note, it.source)
+                it.content, it.contact, it.status, it.score, it.broadcastDate, it.broadcastTime, it.note, it.source, it.reviewedBy, it.scheduledBy, it.updatedBy)
         }
         val stamp = LocalDateTime.now(schoolZone).format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmm"))
         if (format == "csv") {

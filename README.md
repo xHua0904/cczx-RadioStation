@@ -1,6 +1,40 @@
 # cczx-RadioStation
 
-校园广播投稿系统，后端使用 Kotlin + Spring Boot，默认 SQLite，也支持 PostgreSQL。公开项目、API、Android 和部署说明集中在本文件。默认管理员密码为 `admin`，使用 `--show-password` 查询当前密码。应用不会生成或改写 `.md` 文件。
+校园广播投稿系统，后端使用 Kotlin + Spring Boot，默认 SQLite，也支持 PostgreSQL。公开项目、API、Android 和部署说明集中在本文件。默认管理员密码为 `cczx123456`，使用 `--show-password` 查询当前密码。应用不会生成或改写 `.md` 文件。
+
+
+## 后台账号与操作人
+
+- 默认账号：`新媒体中心`；每个新账号的默认密码：`cczx123456`。
+- 登录必须同时提供账号和密码。网页不提供注册或添加账号的入口，HTTP API 也不提供注册接口；所有后台账号拥有稿件与消息管理权限。
+- 账号名称为 1–40 个字符，允许中文，不允许控制字符。重复添加会报错并保留原密码。
+- 每个账号可在后台修改自己的密码，修改或重置只注销该账号的会话，其他账号不受影响。
+
+在项目根目录、使用与网站相同的数据库配置执行下列命令。命令完成后退出，不启动网页服务：
+
+```powershell
+# 添加账号，初始密码统一为 cczx123456
+java -jar target/cczx-RadioStation.jar --add-account="网络部"
+# 查看已有账号
+java -jar target/cczx-RadioStation.jar --list-accounts
+# 查询指定账号的当前密码；省略 --account 时查询「新媒体中心」
+java -jar target/cczx-RadioStation.jar --show-password --account="网络部"
+# 重置指定账号为 cczx123456；省略 --account 时重置「新媒体中心」
+java -jar target/cczx-RadioStation.jar --reset-password --account="网络部"
+```
+
+审稿、批量审批、全部审核、排期、切换播出状态、修改评分或备注、手动登记、删除稿件以及公告/投稿计划的发布、撤回、恢复和删除均记录实际操作账号。后台顶部显示当前账号；稿件列表、详情、日历显示审稿人、排期人和最近操作人；公告栏显示实际发布者。控制台的「操作记录」支持翻页，删除内容后仍保留操作历史。操作人从登录会话获取，客户端填写的操作人字段无效。
+
+稿件接口新增 `reviewed_by`、`scheduled_by`、`updated_by`；消息接口的 `publisher` 为发布账号，并新增 `updated_by`、`updated_at`。CSV/Excel 导出增加审稿人、排期人、最近操作人。认证后的 `GET /api/admin/me` 返回 `username`；`GET /api/admin/audit?page=1` 返回 `items`、`total`、`page`、`pages`，支持 `target_type=submission` 或 `announcement` 及 `target_id` 筛选，每页 20 条。
+
+登录示例：`{"username":"新媒体中心","password":"cczx123456"}`。登录成功返回 `token`、`expires_at`、`username` 和 `initial_password`。后台改密仅操作会话所属账号，传入其他账号名称不会修改其他人的密码。
+
+升级使用 SQLite 幂等迁移 / PostgreSQL Flyway V4。旧共用密码归入「新媒体中心」；旧默认密码 `admin` 升级为 `cczx123456`，已经修改过的密码保留，旧会话注销。旧投稿和公告保留，无法确定的历史操作人留空。
+
+投稿页和后台页的页尾均左对齐显示「长春中学新媒体中心」（较大字号）、「by网络部x长春中学科创社」，最后一行的 GitHub 图标链接到 https://github.com/xHua0904/cczx-RadioStation。
+
+本文仅手动维护。本次按功能需求更新文档，网站运行、添加账号、改密、查询和重置均不会自动创建或改写 `.md`，文档只列默认密码。
+
 
 ## 直接运行 jar（推荐）
 
@@ -32,12 +66,12 @@ if (-not (Test-Path -LiteralPath (Join-Path $taskRoot 'pom.xml'))) {
     throw '请先进入 cczx-RadioStation 项目根目录。'
 }
 
-# 默认启动网站；查询密码时改为 @('--show-password')，恢复 admin 时改为 @('--reset-password')。
+# 默认启动网站；查询密码时改为 @('--show-password')，恢复 cczx123456 时改为 @('--reset-password')。
 $taskAppArgs = @()
 
 if (Test-Path -LiteralPath '.env') {
     foreach ($taskLine in Get-Content -LiteralPath '.env' -Encoding UTF8) {
-        if ($taskLine -match '^\s*(DB_URL|DB_USER|DB_PASSWORD|SPRING_PROFILES_ACTIVE|PORT|DATA_DIR|BROADCAST_ADMIN_PASSWORD)\s*=(.*)$') {
+        if ($taskLine -match '^\s*(DB_URL|DB_USER|DB_PASSWORD|SPRING_PROFILES_ACTIVE|PORT|DATA_DIR)\s*=(.*)$') {
             $taskKey = $Matches[1]
             $taskValue = $Matches[2].Trim()
             if ($taskValue.Length -ge 2 -and (($taskValue.StartsWith('"') -and $taskValue.EndsWith('"')) -or ($taskValue.StartsWith("'") -and $taskValue.EndsWith("'")))) {
@@ -73,7 +107,7 @@ if ($taskAppArgs.Count -eq 0) {
 if ($LASTEXITCODE -ne 0) { throw '应用退出时发生错误，请查看上方日志。' }
 ```
 
-默认管理员密码为 `admin`，查询当前密码可将 `$taskAppArgs` 改为 `@('--show-password')`。应用不创建或改写任何 `.md`。其他命令可将上述 `$taskAppArgs` 改为 `@('--demo-data')` 或 `@('--import-legacy=data/legacy-export.json')`；这些命令执行完成后退出。
+默认管理员密码为 `cczx123456`，查询当前密码可将 `$taskAppArgs` 改为 `@('--show-password')`。应用不创建或改写任何 `.md`。其他命令可将上述 `$taskAppArgs` 改为 `@('--demo-data')` 或 `@('--import-legacy=data/legacy-export.json')`；这些命令执行完成后退出。
 
 ---
 
@@ -122,14 +156,13 @@ java -jar target/cczx-RadioStation.jar
 | --- | --- |
 | `PORT` | HTTP 端口，默认 `8000` |
 | `DATA_DIR` | SQLite 数据及备份目录，默认 `./data` |
-| `BROADCAST_ADMIN_PASSWORD` | 新数据库初始密码，默认 `admin`；可设为 admin 或 6–64 位，已有密码不覆盖 |
 | `SPRING_PROFILES_ACTIVE=postgres` | 使用 PostgreSQL |
 | `DB_URL` / `DB_USER` / `DB_PASSWORD` | 数据库连接配置 |
 
 ```powershell
 # 查询当前管理员密码，打印后退出；必须使用网站相同的数据库和 DATA_DIR
 java -jar target/cczx-RadioStation.jar --show-password
-# 恢复默认密码 admin，注销全部登录会话，然后退出
+# 恢复默认密码 cczx123456，注销当前账号的全部登录会话，然后退出
 java -jar target/cczx-RadioStation.jar --reset-password
 # 添加 20 条带「演示数据」审核备注的稿件，然后退出
 java -jar target/cczx-RadioStation.jar --demo-data
@@ -137,7 +170,7 @@ java -jar target/cczx-RadioStation.jar --demo-data
 
 ## 密码查询与默认值
 
-新数据库默认密码为 `admin`。`BROADCAST_ADMIN_PASSWORD` 只影响首次初始化，不会覆盖已有密码；后台改密后重启仍使用新密码。`--reset-password` 固定恢复为 `admin`。
+新数据库默认密码为 `cczx123456`。新建账号统一使用默认密码，不覆盖已有账号密码；后台改密后重启仍使用新密码。`--reset-password` 固定恢复为 `cczx123456`。
 
 ```powershell
 # 本机查询当前密码，查询完成后退出，不启动 HTTP 服务
@@ -151,7 +184,7 @@ java -jar target/cczx-RadioStation.jar --show-password
 ## 页面功能
 
 - 投稿页：姓名、班级、必填稿件内容、选填联系方式；不再选择投稿期次。
-- 公告栏：按块显示公告和投稿计划、日期，发布者固定为「新媒体中心」。
+- 公告栏：按块显示公告和投稿计划、日期，显示实际账号发布者。
 - 控制台：服务器 IP、JVM、内存、数据库延迟、投稿统计、班级排行与近期播出安排。
 - 稿件审批：待审列表、搜索、分页、右侧选中操作、手动登记和 CSV/Excel 导出。全部审核先提示风险，取消不提交；确认只处理提示前的稿件快照，新投稿继续待审。
 - 已审批稿件：标题下切换「已审批稿件 / 已安排稿件 / 播出日历」。已审批页面展示未排期的已审核稿件；已安排页面展示有播出日期的已通过、已播出稿件。添加或移出日程后自动归入对应页面，分别支持搜索、分页、筛选和导出。日历选中日期后按时间展示当天稿件，每篇可切换「待播出 / 已播出」并保存，保留日期、时间和备注，支持跨月浏览和返回今天。
@@ -169,7 +202,7 @@ java -jar target/cczx-RadioStation.jar --show-password
 
 ## REST API
 
-请求和响应为 JSON，字段使用 `snake_case`。除登录外，管理接口需要 `Authorization: Bearer <token>`。登录有效期为 12 小时，退出注销当前 token，改密与重置密码注销全部会话。
+请求和响应为 JSON，字段使用 `snake_case`。除登录外，管理接口需要 `Authorization: Bearer <token>`。登录有效期为 12 小时，退出注销当前 token，改密与重置密码只注销该账号的全部会话。
 
 | 方法 | 路径 | 用途 |
 | --- | --- | --- |
@@ -179,7 +212,9 @@ java -jar target/cczx-RadioStation.jar --show-password
 | GET | `/api/announcements` | 已发布公告与投稿计划 |
 | POST | `/api/submissions/track` | 旧查询 API，按编号和姓名查询 |
 | GET | `/api/submissions/track?code=...&author=...` | 兼容旧查询，网页不提供入口 |
-| POST | `/api/admin/login` | 密码登录，返回 token 与过期时间 |
+| GET | `/api/admin/me` | 当前登录账号 |
+| GET | `/api/admin/audit` | 分页操作记录及对象筛选 |
+| POST | `/api/admin/login` | 账号与密码登录，返回账号、token 与过期时间 |
 | POST | `/api/admin/logout` | 注销当前 token |
 | POST | `/api/admin/password` | 改密并注销会话，不修改文档 |
 | GET | `/api/admin/server` | 服务器 IP、JVM、内存、数据库与运行时长 |
@@ -204,7 +239,7 @@ java -jar target/cczx-RadioStation.jar --show-password
 
 列表参数为 `phase=pending` 或 `reviewed`、`schedule=unscheduled` 或 `scheduled`、`q`、`status`、`category`、`start`、`end`、`page`，每页 15 条；返回 `items`、`total`、`page`、`pages`、`page_size`、`counts`。未排期已审批页面使用 `phase=reviewed&schedule=unscheduled`；已安排页面使用 `phase=reviewed&schedule=scheduled`，包含已通过、已播出稿件。省略 `schedule` 时保持原列表兼容性。CSV/Excel 导出支持相同筛选参数。
 
-登录请求为 `{"password":"管理员密码"}`；改密请求为 `{"old_password":"原密码","new_password":"新密码"}`，新密码可为 `admin` 或 6–64 位。
+登录请求为 `{"username":"新媒体中心","password":"cczx123456"}`；改密请求为 `{"old_password":"原密码","new_password":"新密码"}`，新密码须为 6–64 位。
 
 批量排期请求：
 
@@ -311,7 +346,7 @@ node tests/password-cli.cjs
 python tests/offline_checks.py
 ```
 
-Kotlin / SQLite 测试覆盖投稿、认证、并发编号、审批、日程、公告、CSV/Excel、旧库升级与导入、默认密码、改密、查询密钥缺失及手动文档保持不变。`password-cli.cjs` 验证真实 jar 查询、重置、命令互斥与文档不变。浏览器测试启动独立 Java 服务与 Edge 配置，检查四模块、IP、风险确认、已审批与已安排列表分离、日历状态切换保留日程、公告文本展示、日历跨月跨年及闰年、手机布局；通过 `EDGE_PATH` 可指定 Edge。
+Kotlin / SQLite 测试覆盖多账号默认密码、账号独立改密与重置、操作人不可伪造、审稿排期和消息操作记录、投稿、认证、并发编号、审批、日程、公告、CSV/Excel、旧库升级与导入、默认密码、改密、查询密钥缺失及手动文档保持不变。`password-cli.cjs` 验证真实 jar 添加账号、列出账号、重复账号保护、查询、重置、命令互斥与文档不变。浏览器测试启动独立 Java 服务与 Edge 配置，检查四模块、IP、风险确认、已审批与已安排列表分离、日历状态切换保留日程、公告文本展示、日历跨月跨年及闰年、手机布局；通过 `EDGE_PATH` 可指定 Edge。
 
 2026-11-15 已通过 12 项 Kotlin/SQLite 测试、4 项投稿页交互测试，以及真实浏览器检查。Maven 的 `surefire-junit-platform:3.5.4` 未缓存，网络受限，因此使用 `tools/run-local-tests.ps1` 执行实际 JUnit 断言和 Spring 测试上下文。本机没有可用 Docker/PostgreSQL，PostgreSQL 集成测试及实际 Android App 联调尚未执行。
 

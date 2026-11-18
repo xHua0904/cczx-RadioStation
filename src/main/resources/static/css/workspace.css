@@ -1,4 +1,20 @@
 /* 投稿页与新媒体中心工作台 */
+.site-credit { width: min(1100px, calc(100% - 40px)); margin: 0 auto; padding: 28px 0 36px; border-top: 1px solid var(--line); text-align: left; color: var(--muted); }
+.site-credit strong { display: block; color: var(--ink); font-size: 22px; font-weight: 600; line-height: 1.5; }
+.site-credit p { margin: 8px 0 14px; font-size: 13px; }
+.github-link { display: inline-flex; align-items: center; color: var(--muted); border-radius: 4px; padding: 2px; }
+.github-link:hover { color: var(--brand); }
+.github-link:focus-visible { outline: 2px solid var(--brand); outline-offset: 4px; }
+.page-admin:has(#dashView:not([hidden])) > .site-credit { margin-left: 226px; width: auto; padding: 28px 34px 36px; }
+.current-account { align-self: center; color: var(--muted); font-size: 12px; max-width: 180px; overflow-wrap: anywhere; }
+.workspace-top-actions { flex-wrap: wrap; align-items: center; }
+.operator-meta { font-size: 11px; line-height: 1.8; margin-top: 8px; color: var(--muted); overflow-wrap: anywhere; }
+.audit-card { margin-top: 22px; padding: 22px; }
+.audit-entry { padding: 12px 0; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; font-size: 13px; }
+.audit-entry span { color: var(--muted); font-size: 11px; }
+.audit-pagination { display: flex; gap: 12px; justify-content: flex-end; align-items: center; margin-top: 16px; font-size: 12px; }
+@media (max-width: 980px) { .page-admin:has(#dashView:not([hidden])) > .site-credit { margin-left: 185px; } }
+@media (max-width: 760px) { .site-credit { width: calc(100% - 28px); } .page-admin:has(#dashView:not([hidden])) > .site-credit { margin-left: 0; padding-inline: 14px; } .current-account { max-width: 100%; flex-basis: 100%; } .audit-card { padding: 16px; } }
 .public-main { width: min(1100px, calc(100% - 40px)); margin: 0 auto; padding: 42px 0 64px; }
 .public-main .page-head { text-align: left; margin-bottom: 30px; }
 .public-main .page-head h1 { font-size: 28px; }

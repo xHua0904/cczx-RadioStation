@@ -8,9 +8,17 @@ import java.time.DayOfWeek
 import kotlin.math.round
 
 @Service
-class SubmissionService(private val repo: SubmissionRepository) {
+class SubmissionService(private val repo: SubmissionRepository, private val audit: AuditService) {
     @Transactional
-    fun create(input: SubmissionInput, admin: Boolean = false) = repo.insert(Validation.submission(input, admin), if (admin) "手动登记" else "在线投稿")
+    fun create(input: SubmissionInput, admin: Boolean = false, actor: String = Passwords.DEFAULT_ACCOUNT): Map<String, Any> {
+        val result = repo.insert(Validation.submission(input, admin), if (admin) "手动登记" else "在线投稿")
+        if (admin) {
+            val row = repo.byCode(result["code"].toString())!!
+            repo.update(row.id, mapOf("updated_by" to actor, "reviewed_by" to if (row.status == "待审核") "" else actor))
+            audit.record(actor, "手动登记", "submission", row.id, row.code)
+        }
+        return result
+    }
 
     fun meta(): Map<String, Any> {
         val start = LocalDate.now(schoolZone).with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)).toString()
@@ -38,7 +46,7 @@ class SubmissionService(private val repo: SubmissionRepository) {
     }
 
     @Transactional
-    fun update(id: Long, body: Map<String, Any?>): Map<String, Boolean> {
+    fun update(id: Long, body: Map<String, Any?>, actor: String = Passwords.DEFAULT_ACCOUNT): Map<String, Boolean> {
         val fields = linkedMapOf<String, Any?>()
         if (body.containsKey("status")) {
             val status = body["status"]?.toString().orEmpty()
@@ -65,12 +73,24 @@ class SubmissionService(private val repo: SubmissionRepository) {
         if (fields["broadcast_date"] != null && fields["broadcast_date"].toString().isNotBlank() && status !in adoptedStatuses) throw ApiError(400, "仅已通过或已播出稿件可以添加日程")
         if (fields.containsKey("broadcast_time") && fields["broadcast_time"].toString().isNotBlank() && date.isBlank()) throw ApiError(400, "请先设置播出日期")
         if (status !in adoptedStatuses || date.isEmpty()) { fields["broadcast_date"] = ""; fields["broadcast_time"] = "" }
+        val reviewChanged = status != existing.status && status in setOf("已通过", "已退稿", "待审核") && !(existing.status == "已播出" && status == "已通过")
+        val scheduleChanged = (fields["broadcast_date"]?.toString() ?: existing.broadcastDate) != existing.broadcastDate ||
+            (fields["broadcast_time"]?.toString() ?: existing.broadcastTime) != existing.broadcastTime
+        fields["updated_by"] = actor
+        if (reviewChanged) fields["reviewed_by"] = actor
+        if (scheduleChanged) fields["scheduled_by"] = actor
         if (!repo.update(id, fields)) throw ApiError(404, "投稿不存在")
+        if (reviewChanged) audit.record(actor, when (status) { "已通过" -> "审核通过"; "已退稿" -> "退稿"; else -> "重新提交审批" }, "submission", id, existing.code)
+        if (scheduleChanged) audit.record(actor, if (fields["broadcast_date"] == "") "移出日程" else "安排播出日程", "submission", id, existing.code)
+        if (!reviewChanged && !scheduleChanged) audit.record(actor, if (status != existing.status) "切换播出状态：$status" else "修改评分或备注", "submission", id, existing.code)
         return mapOf("ok" to true)
     }
 
-    fun delete(id: Long): Map<String, Boolean> {
+    @Transactional
+    fun delete(id: Long, actor: String = Passwords.DEFAULT_ACCOUNT): Map<String, Boolean> {
+        val row = repo.byId(id) ?: throw ApiError(404, "投稿不存在")
         if (!repo.delete(id)) throw ApiError(404, "投稿不存在")
+        audit.record(actor, "删除稿件", "submission", id, row.code)
         return mapOf("ok" to true)
     }
 
@@ -110,7 +130,7 @@ class SubmissionService(private val repo: SubmissionRepository) {
     }
 
     @Transactional
-    fun batch(body: BatchInput): Map<String, Any> {
+    fun batch(body: BatchInput, actor: String = Passwords.DEFAULT_ACCOUNT): Map<String, Any> {
         val ids = body.ids.distinct()
         if (ids.isEmpty() || ids.any { it <= 0 }) throw ApiError(400, "请先选择稿件")
         if (body.action !in setOf("approve", "reject", "schedule", "played", "clear_schedule", "reopen")) throw ApiError(400, "操作不正确")
@@ -130,17 +150,18 @@ class SubmissionService(private val repo: SubmissionRepository) {
             }
             if (body.action in setOf("approve", "reject")) {
                 val note = Validation.text(body.note, "备注", max = 300, required = false)
-                val changed = repo.jdbc.update("UPDATE submissions SET status=?,note=?,broadcast_date='',broadcast_time='',updated_at=? WHERE id=? AND status='待审核'", fields["status"], note, nowIso(), row.id)
+                val changed = repo.jdbc.update("UPDATE submissions SET status=?,note=?,broadcast_date='',broadcast_time='',reviewed_by=?,updated_by=?,updated_at=? WHERE id=? AND status='待审核'", fields["status"], note, actor, actor, nowIso(), row.id)
                 if (changed != 1) throw ApiError(409, "稿件状态已改变，请刷新列表")
-            } else update(row.id, fields)
+                audit.record(actor, if (body.action == "approve") "审核通过" else "退稿", "submission", row.id, row.code)
+            } else update(row.id, fields, actor)
         }
         return mapOf("ok" to true, "updated" to ids.size)
     }
 
     @Transactional
-    fun approveAll(body: BatchInput): Map<String, Any> {
+    fun approveAll(body: BatchInput, actor: String = Passwords.DEFAULT_ACCOUNT): Map<String, Any> {
         if (!body.confirmed) throw ApiError(400, "全部审核属于风险操作，需要明确确认")
-        val result = batch(body.copy(action = "approve"))
+        val result = batch(body.copy(action = "approve"), actor)
         return result + ("remaining" to repo.count(repo.filters(mapOf("phase" to "pending"))))
     }
 

@@ -11,7 +11,7 @@ import java.nio.file.Path
 
 @Testcontainers(disabledWithoutDocker = true)
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = [
-    "app.admin-password=TestAdmin123", "app.storage=postgres", "spring.flyway.enabled=true",
+    "app.admin-password=cczx123456", "app.storage=postgres", "spring.flyway.enabled=true",
     "spring.flyway.locations=classpath:db/postgres", "spring.datasource.driver-class-name=org.postgresql.Driver",
     "spring.datasource.hikari.maximum-pool-size=5", "spring.datasource.hikari.connection-init-sql=SELECT 1"
 ])

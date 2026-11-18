@@ -19,10 +19,11 @@ abstract class ApiContract {
     @LocalServerPort private var port: Int = 0
     @Autowired private lateinit var json: ObjectMapper
     @Autowired private lateinit var repo: SubmissionRepository
+    @Autowired private lateinit var auth: AuthService
     private val client = HttpClient.newHttpClient()
     private val song = mapOf("author" to "测试同学", "class_name" to "高一一班", "period" to Weeks.current().key, "content" to "记录校园生活，分享身边的温暖。")
 
-    @BeforeEach fun clear() { repo.jdbc.update("DELETE FROM submissions"); repo.jdbc.update("DELETE FROM counters"); repo.jdbc.update("DELETE FROM sessions"); repo.jdbc.update("DELETE FROM announcements") }
+    @BeforeEach fun clear() { repo.jdbc.update("DELETE FROM submissions"); repo.jdbc.update("DELETE FROM counters"); repo.jdbc.update("DELETE FROM sessions"); repo.jdbc.update("DELETE FROM announcements"); repo.jdbc.update("DELETE FROM audit_log"); repo.jdbc.update("DELETE FROM accounts WHERE username<>'新媒体中心'") }
     private fun request(method: String, path: String, body: Any? = null, token: String? = null): HttpResponse<ByteArray> {
         val builder = HttpRequest.newBuilder(URI("http://127.0.0.1:$port$path")).header("Content-Type", "application/json")
         if (token != null) builder.header("Authorization", "Bearer $token")
@@ -30,9 +31,46 @@ abstract class ApiContract {
     }
     private fun data(response: HttpResponse<ByteArray>): JsonNode = json.readTree(response.body())
     private fun login(): String {
-        val response = request("POST", "/api/admin/login", mapOf("password" to "TestAdmin123"))
+        val response = request("POST", "/api/admin/login", mapOf("username" to "新媒体中心", "password" to "cczx123456"))
         assertEquals(200, response.statusCode())
         return data(response).path("token").asText()
+    }
+
+    @Test fun `操作人来自登录账号且审批排期消息删除均可追溯`() {
+        auth.addAccount("网络部"); auth.addAccount("科创社")
+        fun accountLogin(name: String): String {
+            val response = request("POST", "/api/admin/login", mapOf("username" to name, "password" to "cczx123456"))
+            assertEquals(200, response.statusCode()); assertEquals(name, data(response).path("username").asText())
+            return data(response).path("token").asText()
+        }
+        val network = accountLogin("网络部"); val science = accountLogin("科创社")
+        assertEquals("网络部", data(request("GET", "/api/admin/me", token = network)).path("username").asText())
+        assertEquals(400, request("POST", "/api/admin/login", mapOf("password" to "cczx123456")).statusCode())
+        assertEquals(401, request("GET", "/api/admin/audit").statusCode())
+        assertEquals(404, request("POST", "/api/admin/accounts", mapOf("username" to "注册账号"), network).statusCode())
+        assertEquals(200, request("POST", "/api/submissions", song).statusCode())
+        val id = data(request("GET", "/api/admin/review-summary", token = network)).path("ids").first().asLong()
+        assertEquals(200, request("POST", "/api/admin/submissions/approve-all", mapOf("ids" to listOf(id), "confirmed" to true, "reviewed_by" to "伪造审稿人"), network).statusCode())
+        assertEquals(200, request("POST", "/api/admin/submissions/batch", mapOf("ids" to listOf(id), "action" to "schedule", "broadcast_date" to "2026-12-01", "broadcast_time" to "12:30"), science).statusCode())
+        assertEquals(200, request("PATCH", "/api/admin/submissions/$id", mapOf("status" to "已播出", "updated_by" to "伪造操作人"), science).statusCode())
+        val row = data(request("GET", "/api/admin/schedule", token = science)).path("items").first()
+        assertEquals("网络部", row.path("reviewed_by").asText()); assertEquals("科创社", row.path("scheduled_by").asText())
+        assertEquals("科创社", row.path("updated_by").asText()); assertEquals("12:30", row.path("broadcast_time").asText())
+        val before = data(request("GET", "/api/admin/audit", token = science)).path("total").asLong()
+        assertEquals(400, request("PATCH", "/api/admin/submissions/$id", mapOf("score" to 101), network).statusCode())
+        assertEquals(before, data(request("GET", "/api/admin/audit", token = science)).path("total").asLong())
+        val message = data(request("POST", "/api/admin/announcements", mapOf("title" to "网络部公告", "content" to "测试公告", "publisher" to "伪造发布者"), network)).path("id").asLong()
+        assertEquals("网络部", data(request("GET", "/api/announcements")).path("items").first().path("publisher").asText())
+        assertEquals(200, request("PATCH", "/api/admin/announcements/$message", mapOf("published" to false), science).statusCode())
+        val item = data(request("GET", "/api/admin/announcements", token = science)).path("items").first()
+        assertEquals("网络部", item.path("publisher").asText()); assertEquals("科创社", item.path("updated_by").asText())
+        assertEquals(200, request("DELETE", "/api/admin/announcements/$message", token = science).statusCode())
+        assertEquals(200, request("DELETE", "/api/admin/submissions/$id", token = network).statusCode())
+        val history = data(request("GET", "/api/admin/audit?target_type=submission&target_id=$id", token = network))
+        assertEquals(4, history.path("total").asInt())
+        assertEquals("删除稿件", history.path("items").first().path("action").asText())
+        assertEquals("网络部", history.path("items").first().path("username").asText())
+        assertEquals(3, data(request("GET", "/api/admin/audit?target_type=announcement&target_id=$message", token = science)).path("total").asInt())
     }
 
     @Test fun `投稿审批与导出兼容网页接口`() {
@@ -154,7 +192,7 @@ abstract class ApiContract {
         assertEquals(4, data(request("GET", unscheduledPath, token = token)).path("total").asInt())
     }
 
-    @Test fun `公告发布者固定且撤回后不出现在投稿页`() {
+    @Test fun `公告发布者使用登录账号且撤回后不出现在投稿页`() {
         val token = login()
         val response = request("POST", "/api/admin/announcements", mapOf("title" to "下一期投稿计划", "content" to "欢迎分享校园见闻", "kind" to "投稿计划", "publisher" to "伪造发布者"), token)
         assertEquals(200, response.statusCode())

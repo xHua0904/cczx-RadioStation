@@ -26,7 +26,8 @@ data class Submission(
     val status: String, val score: Int?, val broadcastDate: String, val note: String,
     val source: String, val createdAt: String, val updatedAt: String,
     val songName: String, val artist: String, val songUrl: String,
-    val period: String = "", val broadcastTime: String = ""
+    val period: String = "", val broadcastTime: String = "",
+    val reviewedBy: String = "", val scheduledBy: String = "", val updatedBy: String = ""
 )
 
 object Validation {

@@ -33,7 +33,7 @@ class LegacyImportTest {
         transactions.executeWithoutResult { importer.importFile(file) }
         assertEquals("保留旧稿件内容", repo.byId(42)?.content)
         assertEquals("GB261115043", transactions.execute { repo.nextCode("2026-11-15") })
-        assertTrue(Passwords.verify("旧密码Test123", auth.setting("admin_hash").orEmpty()))
+        assertNotNull(auth.login("旧密码Test123", "local")["token"])
         assertThrows(IllegalArgumentException::class.java) { transactions.executeWithoutResult { importer.importFile(file) } }
         assertEquals(1L, repo.count())
     }
