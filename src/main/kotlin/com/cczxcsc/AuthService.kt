@@ -45,15 +45,17 @@ class AuthService(
                 jdbc.update("INSERT INTO accounts(username,password_hash,password_encrypted,initial_password,created_at,role) VALUES(?,?,?,?,?,'admin') ON CONFLICT(username) DO NOTHING",
                     Passwords.DEFAULT_ACCOUNT, hash, encrypted, if ((legacyHash == null || legacyDefault) && configured == Passwords.DEFAULT_ADMIN_PASSWORD) 1 else 0, nowIso())
             }
+            // 保留 role 列兼容已有数据库；所有后台账号统一为管理员，不修改密码或会话。
+            jdbc.update("UPDATE accounts SET role='admin' WHERE role<>'admin'")
             // 旧共用密码迁移为默认账号，历史会话已由表结构升级注销。
             jdbc.update("DELETE FROM settings WHERE key IN ('admin_hash','admin_password_encrypted','admin_password_initial')")
         }
     }
 
     // 仅由本机管理命令调用，网页和 HTTP API 不提供创建账号的入口。
-    fun addAccount(username: String, role: String = "editor") {
+    fun addAccount(username: String, role: String = "admin") {
         val user = name(username)
-        if (role !in setOf("admin", "editor")) throw ApiError(400, "角色应为 admin 或 editor")
+        if (role != "admin") throw ApiError(400, "所有后台账号统一为管理员，仅支持 admin 角色")
         transactions.executeWithoutResult {
             val inserted = jdbc.update("INSERT INTO accounts(username,password_hash,password_encrypted,initial_password,created_at,role) VALUES(?,?,?,1,?,?) ON CONFLICT(username) DO NOTHING",
                 user, Passwords.hash(Passwords.DEFAULT_ADMIN_PASSWORD), vault.encrypt(Passwords.DEFAULT_ADMIN_PASSWORD), nowIso(), role)
@@ -63,10 +65,10 @@ class AuthService(
     }
 
     fun listAccounts(): List<String> = jdbc.queryForList("SELECT username FROM accounts ORDER BY created_at,username", String::class.java)
-    fun accountRole(username: String): String = account(name(username))?.get("role")?.toString() ?: throw ApiError(404, "账号不存在")
+    fun accountRole(username: String): String = account(name(username))?.let { "admin" } ?: throw ApiError(404, "账号不存在")
     fun setRole(username: String, role: String) {
         val user = name(username)
-        if (role !in setOf("admin", "editor") || (user == Passwords.DEFAULT_ACCOUNT && role != "admin")) throw ApiError(400, "角色无效；默认管理账号必须保留 admin 角色")
+        if (role != "admin") throw ApiError(400, "所有后台账号统一为管理员，仅支持 admin 角色")
         transactions.executeWithoutResult {
             if (jdbc.update("UPDATE accounts SET role=? WHERE username=?", role, user) != 1) throw ApiError(404, "账号不存在")
             jdbc.update("DELETE FROM sessions WHERE username=?", user)
@@ -125,7 +127,7 @@ class AuthService(
             if (inserted != 1) throw ApiError(401, "密码已更新，请重新登录")
             audit.record(userName, "登录成功", "security", "login", "来源：$ip")
         }
-        return mapOf("ok" to true, "token" to token, "expires_at" to expires, "username" to userName, "role" to user["role"].toString(),
+        return mapOf("ok" to true, "token" to token, "expires_at" to expires, "username" to userName, "role" to "admin",
             "initial_password" to needsChange)
     }
 
@@ -133,7 +135,7 @@ class AuthService(
         val token = if (header?.startsWith("Bearer ", ignoreCase = true) == true) header.substring(7).trim() else ""
         if (token.isEmpty() || token.length > 256) throw ApiError(401, "请先登录")
         val hash = Passwords.digest(token)
-        val row = jdbc.queryForList("SELECT s.expires_at,s.last_seen_at,a.username,a.role,a.initial_password FROM sessions s JOIN accounts a ON a.username=s.username WHERE s.token=?", hash).firstOrNull()
+        val row = jdbc.queryForList("SELECT s.expires_at,s.last_seen_at,a.username,a.initial_password FROM sessions s JOIN accounts a ON a.username=s.username WHERE s.token=?", hash).firstOrNull()
             ?: throw ApiError(401, "登录已过期，请重新登录")
         val now = OffsetDateTime.now(schoolZone)
         val expiry = runCatching { OffsetDateTime.parse(row["expires_at"].toString()) }.getOrNull()
@@ -143,7 +145,7 @@ class AuthService(
             throw ApiError(401, "登录已过期，请重新登录")
         }
         if (lastSeen.plusSeconds(60).isBefore(now)) jdbc.update("UPDATE sessions SET last_seen_at=? WHERE token=? AND last_seen_at=?", nowIso(), hash, row["last_seen_at"])
-        return AdminSession(hash, row["username"].toString(), row["role"].toString(), (row["initial_password"] as Number).toInt() == 1)
+        return AdminSession(hash, row["username"].toString(), "admin", (row["initial_password"] as Number).toInt() == 1)
     }
 
     fun requireAdmin(header: String?): String = session(header).tokenHash

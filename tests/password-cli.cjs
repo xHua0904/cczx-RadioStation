@@ -90,10 +90,12 @@ async function main() {
   assert.match(await command(['--show-password', '--logging.level.root=ERROR', '--spring.main.banner-mode=off']), /账号 新媒体中心 的密码：Cli安全改密123456/);
   await command(['--show-password', '--reset-password'], false);
   assert.match(await command(['--show-password']), /账号 新媒体中心 的密码：Cli安全改密123456/);
-  assert.match(await command(['--list-accounts']), /网络部\teditor/);
+  assert.match(await command(['--list-accounts']), /网络部\tadmin/);
   assert.match(await command(['--set-role=网络部', '--role=admin']), /角色已设置为 admin/);
   await command(['--set-role=网络部'], false);
   await command(['--set-role=新媒体中心', '--role=editor'], false);
+  await command(['--set-role=网络部', '--role=editor'], false);
+  await command(['--add-account=低权限账号', '--role=editor'], false);
   assert.match(await command(['--show-password', '--account=网络部']), /账号 网络部 的密码：NetworkChanged123/);
   await command(['--reset-password', '--account=网络部']);
   assert.match(await command(['--show-password', '--account=网络部']), /账号 网络部 的密码：cczx123456/);

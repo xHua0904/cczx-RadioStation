@@ -303,9 +303,9 @@ async function main() {
   console.log('PASS 管理员密码：后台改密并拒绝改回公开默认密码');
   await click('#btnLogout'); await fill('#username', '网络部'); await fill('#password', testPassword); await click('#loginBtn');
   await waitPage('document.querySelector("#currentAccount").textContent.includes("网络部") && !document.querySelector("#dashView").hidden');
-  await waitPage('document.querySelector("#serverStatusBadge").textContent === "编辑模式"');
-  assert.equal(await cdp.eval('document.querySelector("#deleteSelected").hidden'), true);
-  assert.equal(await cdp.eval('Array.from(document.querySelectorAll("[data-export]")).every(button => button.hidden)'), true);
+  await waitPage('document.querySelector("#serverStatusBadge").textContent === "运行中"');
+  assert.equal(await cdp.eval('document.querySelector("#deleteSelected").hidden'), false);
+  assert.equal(await cdp.eval('Array.from(document.querySelectorAll("[data-export]")).every(button => !button.hidden)'), true);
   assert.ok(await cdp.eval('document.querySelector("#auditHistory").textContent.includes("新媒体中心")'));
   await click('.nav-item[data-view=approved]'); await click('#approvedScheduledTab');
   await waitPage('document.querySelectorAll("#manuscriptBody tr[data-id]").length === 3');
@@ -318,6 +318,7 @@ async function main() {
   assert.equal(await cdp.eval('document.querySelector("#messagePublisher").textContent'), '网络部');
   await fill('#messageTitle', '网络部操作人公告'); await fill('#messageContent', '显示实际发布账号。'); await click('#publishMessage');
   await waitPage('document.querySelector("#messageHistory").textContent.includes("发布者：网络部")');
+  assert.ok(await cdp.eval('document.querySelector("#messageHistory [data-delete-message]") !== null'));
   await screenshot('accounts-mobile');
   await navigate('/', 'document.querySelectorAll(".announcement-card").length === 1');
   assert.ok(await cdp.eval('document.querySelector(".announcement-meta").textContent.includes("网络部")'));

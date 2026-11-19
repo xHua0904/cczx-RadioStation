@@ -12,20 +12,18 @@
     const node = document.createElement("div"); node.className = "toast " + (error ? "err" : "ok"); node.textContent = message; $("#toasts").appendChild(node); setTimeout(() => node.remove(), 4500);
   }
   function showError(message) { $("#workspaceError").textContent = message; $("#workspaceError").hidden = !message; }
-  function setAccount(username, role = "editor") {
-    state.role = role;
+  function setAccount(username) {
     state.username = username; $("#currentAccount").textContent = "当前账号：" + username;
     $("#messagePublisher").textContent = username; $("#username").value = username;
-    $$('[data-export]').forEach(button => { button.hidden = role !== "admin"; }); $("#deleteSelected").hidden = role !== "admin";
   }
   function passwordValid(value) { return value.length >= 10 && value.length <= 64 && /\p{L}/u.test(value) && /\p{N}/u.test(value) && value !== "cczx123456" && !/[\x00-\x1f\x7f]/.test(value); }
   function requirePasswordChange(data, oldPassword = "") {
-    if (data.username) setAccount(data.username, data.role);
+    if (data.username) setAccount(data.username);
     $("#dashView").hidden = $("#loginView").hidden = true; $("#changeRequiredView").hidden = false;
     $("#initialAccount").textContent = "账号：" + state.username; $("#initialPasswordForm").reset(); $("#initialOldPassword").value = oldPassword; $("#initialPasswordError").textContent = "";
   }
   async function enterSession(data, oldPassword = "") {
-    setAccount(data.username, data.role);
+    setAccount(data.username);
     if (data.initial_password) { requirePasswordChange(data, oldPassword); return; }
     $("#changeRequiredView").hidden = $("#loginView").hidden = true; $("#dashView").hidden = false;
     await showView("dashboard");
@@ -61,7 +59,6 @@
     updateSelection();
   }
   async function loadServer() {
-    if (state.role !== "admin") { $("#serverStatusBadge").textContent = "编辑模式"; $("#serverData").textContent = "服务器详情仅管理员可见。"; $("#serverLabel").textContent = "已登录"; return; }
     const data = await api("/api/admin/server"); const seconds = data.uptime_seconds;
     const metrics = [["服务状态", "正常运行"], ["服务器 IP", (data.server_ips || [data.server_ip]).filter(Boolean).join("、") || "暂无可用地址"], ["运行时长", Math.floor(seconds / 3600) + " 小时 " + Math.floor(seconds % 3600 / 60) + " 分钟"], ["数据库", data.storage], ["连接耗时", Number(data.database_latency_ms).toFixed(1) + " ms"], ["JVM 版本", data.java_version], ["内存占用", data.memory_used_mb + " / " + data.memory_max_mb + " MB"], ["处理器", data.processors + " 核"], ["服务器时间", data.time.replace("T", " ").slice(0, 19)]];
     $("#serverData").innerHTML = metrics.map(([name, value]) => `<div><dt>${esc(name)}</dt><dd>${esc(value)}</dd></div>`).join(""); $("#serverDot").classList.add("online"); $("#serverLabel").textContent = "服务器运行正常"; $("#serverStatusBadge").className = "badge st-aired"; $("#serverStatusBadge").textContent = "运行中";
@@ -147,7 +144,7 @@
     $("#approveSelected").disabled = $("#rejectSelected").disabled = !active;
     $("#scheduleSelected").disabled = $("#markPlayed").disabled = !active || !selected.every(row => row.status === "已通过");
     $("#clearSchedule").disabled = !active || !selected.every(row => row.broadcast_date && ["已通过", "已播出"].includes(row.status));
-    $("#saveSelected").disabled = !single || state.busy; $("#deleteSelected").disabled = !single || state.busy || state.role !== "admin";
+    $("#saveSelected").disabled = !single || state.busy; $("#deleteSelected").disabled = !single || state.busy;
     $("#reopenSelected").disabled = !active;
     $("#approveAllButton").disabled = state.busy || state.pending === 0;
     $$("[data-calendar-status], [data-save-calendar-status]").forEach(control => { control.disabled = state.busy; });
@@ -231,7 +228,7 @@
   async function loadMessages() {
     const data = await api("/api/admin/announcements"), items = data.items || [];
     $("#messageCount").textContent = items.length + " 条";
-    $("#messageHistory").innerHTML = items.length ? items.map(item => `<article class="message-history-item ${item.published ? "" : "withdrawn"}"><span class="message-kind">${esc(item.kind)}${item.published ? "" : " · 已撤回"}</span><h3>${esc(item.title)}</h3><p class="announcement-meta">${esc(item.published_at.slice(0, 10))} · 发布者：${esc(item.publisher)}${item.updated_by ? `<br>最近操作人：${esc(item.updated_by)} · ${esc(item.updated_at.replace("T", " "))}` : ""}</p><p class="announcement-content">${esc(item.content)}</p><div class="message-operations"><button class="text-button" data-message-id="${item.id}" data-published="${!item.published}">${item.published ? "撤回消息" : "恢复发布"}</button>${state.role === "admin" ? `<button class="text-button danger-text" data-delete-message="${item.id}">删除</button>` : ""}</div></article>`).join("") : '<p class="empty-state">暂无消息，发布后会显示在投稿页公告栏。</p>';
+    $("#messageHistory").innerHTML = items.length ? items.map(item => `<article class="message-history-item ${item.published ? "" : "withdrawn"}"><span class="message-kind">${esc(item.kind)}${item.published ? "" : " · 已撤回"}</span><h3>${esc(item.title)}</h3><p class="announcement-meta">${esc(item.published_at.slice(0, 10))} · 发布者：${esc(item.publisher)}${item.updated_by ? `<br>最近操作人：${esc(item.updated_by)} · ${esc(item.updated_at.replace("T", " "))}` : ""}</p><p class="announcement-content">${esc(item.content)}</p><div class="message-operations"><button class="text-button" data-message-id="${item.id}" data-published="${!item.published}">${item.published ? "撤回消息" : "恢复发布"}</button><button class="text-button danger-text" data-delete-message="${item.id}">删除</button></div></article>`).join("") : '<p class="empty-state">暂无消息，发布后会显示在投稿页公告栏。</p>';
   }
   async function exportFile(format) {
     try {

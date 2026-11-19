@@ -21,7 +21,7 @@ class Application {
             ?: throw IllegalArgumentException("--$option 需要指定一个非空值")
         val username = if (args.containsOption("account")) value("account") else Passwords.DEFAULT_ACCOUNT
         require(!args.containsOption("role") || args.containsOption("add-account") || args.containsOption("set-role")) { "--role 仅用于添加账号或设置角色" }
-        val role = if (args.containsOption("role")) value("role") else "editor"
+        val role = if (args.containsOption("role")) value("role") else "admin"
         if (!args.containsOption("import-legacy")) auth.initialize()
         when {
             args.containsOption("import-legacy") -> imports.importFile(Path.of(args.getOptionValues("import-legacy").first()))

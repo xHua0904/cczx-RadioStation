@@ -76,25 +76,43 @@ class ApiSecurityTest {
         assertEquals(403, request("GET", "/api/admin/submissions", token = login()).statusCode())
     }
 
-    @Test fun `编辑可审批排期发布但不能删除导出或读取联系方式`() {
+    @Test fun `所有账号包括旧编辑账号具有相同的最高管理权限`() {
         val admin = admin()
-        auth.addAccount("学生编辑"); auth.changePassword("cczx123456", strong, "学生编辑")
-        val editor = login("学生编辑", strong)
+        auth.addAccount("网络部"); auth.changePassword("cczx123456", strong, "网络部")
+        auth.addAccount("科创社"); auth.changePassword("cczx123456", strong, "科创社")
+        assertEquals("admin", auth.accountRole("网络部"))
+        assertEquals("admin", repo.jdbc.queryForObject("SELECT role FROM accounts WHERE username='网络部'", String::class.java))
+        val network = login("网络部", strong)
+        val science = login("科创社", strong)
+        // 模拟已有库仍保存 editor；旧会话与新登录都应得到完整权限。
+        repo.jdbc.update("UPDATE accounts SET role='editor' WHERE username='网络部'")
+        val legacyLogin = login("网络部", strong)
+        for (token in listOf(admin, network, science, legacyLogin)) {
+            assertEquals("admin", json.readTree(request("GET", "/api/admin/me", token = token).body()).path("role").asText())
+        }
         assertEquals(200, request("POST", "/api/submissions", song).statusCode())
         val id = repo.jdbc.queryForObject("SELECT id FROM submissions LIMIT 1", Long::class.java)!!
-        for (path in listOf("/api/admin/export?format=csv", "/api/admin/server")) assertEquals(403, request("GET", path, token = editor).statusCode())
-        assertEquals(403, request("DELETE", "/api/admin/submissions/$id", token = editor).statusCode())
-        assertEquals("", json.readTree(request("GET", "/api/admin/submissions", token = editor).body()).path("items").first().path("contact").asText())
-        assertEquals("13800138000", json.readTree(request("GET", "/api/admin/submissions", token = admin).body()).path("items").first().path("contact").asText())
-        assertEquals(200, request("PATCH", "/api/admin/submissions/$id", mapOf("status" to "已通过", "broadcast_date" to "2026-12-01"), editor).statusCode())
-        assertEquals("", json.readTree(request("GET", "/api/admin/schedule", token = editor).body()).path("items").first().path("contact").asText())
-        val announcement = request("POST", "/api/admin/announcements", mapOf("title" to "安全测试公告", "content" to "编辑可以发布公告"), editor)
+        for (token in listOf(admin, network, science, legacyLogin)) {
+            for (path in listOf("/api/admin/export?format=csv", "/api/admin/export?format=xlsx", "/api/admin/server")) assertEquals(200, request("GET", path, token = token).statusCode())
+            assertEquals("13800138000", json.readTree(request("GET", "/api/admin/submissions", token = token).body()).path("items").first().path("contact").asText())
+        }
+        assertEquals(200, request("PATCH", "/api/admin/submissions/$id", mapOf("status" to "已通过", "broadcast_date" to "2026-12-01"), network).statusCode())
+        assertEquals("13800138000", json.readTree(request("GET", "/api/admin/schedule", token = science).body()).path("items").first().path("contact").asText())
+        val passwordBefore = repo.jdbc.queryForObject("SELECT password_hash FROM accounts WHERE username='网络部'", String::class.java)
+        auth.initialize()
+        assertEquals(0, repo.jdbc.queryForObject("SELECT COUNT(*) FROM accounts WHERE role<>'admin'", Int::class.java))
+        assertEquals(passwordBefore, repo.jdbc.queryForObject("SELECT password_hash FROM accounts WHERE username='网络部'", String::class.java))
+        assertEquals(200, request("GET", "/api/admin/me", token = network).statusCode())
+        assertThrows(ApiError::class.java) { auth.setRole("网络部", "editor") }
+        assertThrows(ApiError::class.java) { auth.addAccount("低权限账号", "editor") }
+        val announcement = request("POST", "/api/admin/announcements", mapOf("title" to "安全测试公告", "content" to "管理人员权限相同"), science)
         assertEquals(200, announcement.statusCode())
         val message = json.readTree(announcement.body()).path("id").asLong()
-        assertEquals(403, request("DELETE", "/api/admin/announcements/$message", token = editor).statusCode())
-        auth.setRole("学生编辑", "admin")
-        assertEquals(401, request("GET", "/api/admin/me", token = editor).statusCode())
-        assertEquals(200, request("GET", "/api/admin/server", token = login("学生编辑", strong)).statusCode())
+        assertEquals(200, request("DELETE", "/api/admin/announcements/$message", token = network).statusCode())
+        assertEquals(200, request("DELETE", "/api/admin/submissions/$id", token = science).statusCode())
+        auth.setRole("网络部", "admin")
+        assertEquals(401, request("GET", "/api/admin/me", token = network).statusCode())
+        assertEquals(200, request("GET", "/api/admin/server", token = login("网络部", strong)).statusCode())
     }
 
     @Test fun `投稿限流隔离来源且路径编码不能绕过请求体上限`() {

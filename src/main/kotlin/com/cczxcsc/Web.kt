@@ -38,7 +38,6 @@ class WebConfig(private val auth: AuthService) : WebMvcConfigurer {
                 val session = auth.session(request.getHeader("Authorization"))
                 val method = (handler as? HandlerMethod)?.method?.name
                 if (session.passwordChangeRequired && method !in setOf("me", "password", "logout")) throw ApiError(403, "请先修改初始密码", "PASSWORD_CHANGE_REQUIRED")
-                if (session.role !in setOf("admin", "editor") || (session.role != "admin" && method in setOf("export", "delete", "deleteMessage", "server"))) throw ApiError(403, "此操作需要管理员权限")
                 request.setAttribute("operator", session.username)
                 request.setAttribute("role", session.role)
                 request.setAttribute("password_change_required", session.passwordChangeRequired)
@@ -116,11 +115,6 @@ class ApiController(private val service: SubmissionService, private val auth: Au
     private val repo: SubmissionRepository, private val publications: PublicationService, private val server: ServerInfoService,
     private val audit: AuditService, private val healthService: HealthService) {
     private fun actor(request: HttpServletRequest) = request.getAttribute("operator") as String
-    private fun visible(items: Map<String, Any>, request: HttpServletRequest): Map<String, Any> {
-        if (request.getAttribute("role") == "admin") return items
-        @Suppress("UNCHECKED_CAST") val rows = items["items"] as? List<Submission> ?: return items
-        return items + ("items" to rows.map { it.copy(contact = "") })
-    }
     @GetMapping("/health") fun health(): ResponseEntity<Map<String, Any>> {
         val healthy = healthService.check()
         return ResponseEntity.status(if (healthy) 200 else 503).body(mapOf("ok" to healthy, "time" to nowIso()))
@@ -135,12 +129,12 @@ class ApiController(private val service: SubmissionService, private val auth: Au
     @GetMapping("/admin/audit") fun history(@RequestParam params: Map<String, String>) = audit.list(params)
     @PostMapping("/admin/logout") fun logout(request: HttpServletRequest): Map<String, Boolean> { auth.logout(request.getHeader("Authorization")); return mapOf("ok" to true) }
     @PostMapping("/admin/password") fun password(@RequestBody body: Map<String, String>, request: HttpServletRequest): Map<String, Boolean> { auth.changePassword(body["old_password"].orEmpty(), body["new_password"].orEmpty(), actor(request)); return mapOf("ok" to true) }
-    @GetMapping("/admin/submissions") fun list(@RequestParam params: Map<String, String>, request: HttpServletRequest) = visible(service.list(params), request)
+    @GetMapping("/admin/submissions") fun list(@RequestParam params: Map<String, String>) = service.list(params)
     @PostMapping("/admin/submissions") fun register(@RequestBody input: SubmissionInput, request: HttpServletRequest) = service.create(input, admin = true, actor = actor(request))
     @GetMapping("/admin/review-summary") fun reviewSummary() = service.reviewSummary()
     @PostMapping("/admin/submissions/batch") fun batch(@RequestBody body: BatchInput, request: HttpServletRequest) = service.batch(body, actor(request))
     @PostMapping("/admin/submissions/approve-all") fun approveAll(@RequestBody body: BatchInput, request: HttpServletRequest) = service.approveAll(body, actor(request))
-    @GetMapping("/admin/schedule") fun schedule(request: HttpServletRequest) = visible(service.schedule(), request)
+    @GetMapping("/admin/schedule") fun schedule() = service.schedule()
     @GetMapping("/admin/server") fun server() = server.info()
     @GetMapping("/admin/announcements") fun messages() = publications.list(public = false)
     @PostMapping("/admin/announcements") fun publish(@RequestBody input: AnnouncementInput, request: HttpServletRequest) = publications.publish(input, actor(request))
