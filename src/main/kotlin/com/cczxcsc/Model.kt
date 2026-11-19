@@ -11,7 +11,7 @@ val statuses = listOf("待审核", "已通过", "已播出", "已退稿")
 val adoptedStatuses = setOf("已通过", "已播出")
 fun nowIso(): String = OffsetDateTime.now(schoolZone).withNano(0).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
 
-class ApiError(val status: Int, override val message: String) : RuntimeException(message)
+class ApiError(val status: Int, override val message: String, val code: String = "") : RuntimeException(message)
 
 data class SubmissionInput(
     val author: String = "", val className: String = "", val contact: String = "",

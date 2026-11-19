@@ -15,7 +15,7 @@ services:
       timeout: 5s
       retries: 12
   app:
-    profiles: ["full"]
+    profiles: ["full", "https"]
     build: .
     environment:
       SPRING_PROFILES_ACTIVE: postgres
@@ -23,13 +23,42 @@ services:
       DB_USER: ${DB_USER:-radio}
       DB_PASSWORD: ${DB_PASSWORD:?请先在 .env 设置 DB_PASSWORD}
       BROADCAST_ADMIN_PASSWORD: ${BROADCAST_ADMIN_PASSWORD:-}
+      REQUIRE_HTTPS: ${REQUIRE_HTTPS:-true}
+      TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS:-172.30.16.2/32}
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     volumes:
       - app-data:/app/data
+      - app-secrets:/app/secrets
     depends_on:
       postgres:
         condition: service_healthy
+  caddy:
+    profiles: ["https"]
+    image: caddy:2-alpine
+    environment:
+      BROADCAST_DOMAIN: ${BROADCAST_DOMAIN:-localhost}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      default:
+        ipv4_address: 172.30.16.2
+    depends_on:
+      - app
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 172.30.16.0/24
 volumes:
   postgres-data:
   app-data:
+  app-secrets:
+  caddy-data:
+  caddy-config:

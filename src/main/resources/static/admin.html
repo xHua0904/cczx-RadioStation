@@ -18,6 +18,20 @@
   </form>
 </div>
 
+<div class="login-wrap" id="changeRequiredView" hidden>
+  <form class="login-card" id="initialPasswordForm" novalidate>
+    <h1>首次登录，请修改密码</h1>
+    <p class="sub" id="initialAccount"></p>
+    <p class="settings-hint">修改密码后才能管理稿件和消息。</p>
+    <div class="login-error" id="initialPasswordError" role="alert"></div>
+    <div class="field"><label for="initialOldPassword">当前密码</label><input class="input" id="initialOldPassword" type="password" autocomplete="current-password" required></div>
+    <div class="field"><label for="initialNewPassword">新密码（10–64 位，包含字母和数字）</label><input class="input" id="initialNewPassword" type="password" autocomplete="new-password" required></div>
+    <div class="field"><label for="initialConfirmPassword">确认新密码</label><input class="input" id="initialConfirmPassword" type="password" autocomplete="new-password" required></div>
+    <button class="btn btn-primary btn-block" id="initialPasswordSave" type="submit">修改密码</button>
+    <button class="text-button" id="initialLogout" type="button">退出登录</button>
+  </form>
+</div>
+
 <div class="workspace" id="dashView" hidden>
   <aside class="sidebar" aria-label="后台导航">
     <a class="sidebar-brand" href="admin.html"><img src="img/logo.png" alt="长春中学校徽"><span><strong>新媒体中心</strong><small>广播站工作台</small></span></a>
@@ -113,7 +127,7 @@
 
 <dialog class="workspace-dialog risk-dialog" id="confirmDialog"><form method="dialog"><span class="risk-label" id="confirmLabel">操作确认</span><h2 id="confirmTitle">确认操作</h2><p id="confirmMessage"></p><div class="dialog-actions"><button class="btn btn-ghost" value="cancel">取消</button><button class="btn btn-danger" id="confirmAccept" value="confirm">确认操作</button></div></form></dialog>
 <dialog class="workspace-dialog" id="newDialog"><form id="newForm" novalidate><div class="card-heading"><h2>手动登记稿件</h2><button class="icon-btn" type="button" data-close="newDialog" aria-label="关闭">×</button></div><div class="row-2"><div class="field"><label for="newAuthor">姓名</label><input class="input" id="newAuthor" maxlength="20"></div><div class="field"><label for="newClass">班级</label><input class="input" id="newClass" maxlength="30"></div></div><div class="field"><label for="newContent">投稿内容（1–100 字）</label><textarea class="textarea" id="newContent" maxlength="100"></textarea></div><div class="field"><label for="newContact">联系方式（选填）</label><input class="input" id="newContact" maxlength="50"></div><button class="btn btn-primary btn-block" id="createManuscript" type="submit">登记稿件</button></form></dialog>
-<dialog class="workspace-dialog" id="settingsDialog"><form id="passwordForm" novalidate><div class="card-heading"><h2>修改当前账号密码</h2><button class="icon-btn" type="button" data-close="settingsDialog" aria-label="关闭">×</button></div><div class="field"><label for="oldPassword">原密码</label><input class="input" id="oldPassword" type="password" autocomplete="current-password"></div><div class="field"><label for="newPassword">新密码（6–64 位）</label><input class="input" id="newPassword" type="password" autocomplete="new-password"></div><div class="field"><label for="confirmPassword">确认密码</label><input class="input" id="confirmPassword" type="password" autocomplete="new-password"></div><p class="settings-hint">修改后注销当前账号的全部登录会话，项目说明中的默认密码保持不变。</p><button class="btn btn-primary btn-block" id="changePassword" type="submit">保存密码</button></form></dialog>
+<dialog class="workspace-dialog" id="settingsDialog"><form id="passwordForm" novalidate><div class="card-heading"><h2>修改当前账号密码</h2><button class="icon-btn" type="button" data-close="settingsDialog" aria-label="关闭">×</button></div><div class="field"><label for="oldPassword">原密码</label><input class="input" id="oldPassword" type="password" autocomplete="current-password"></div><div class="field"><label for="newPassword">新密码（10–64 位，包含字母和数字）</label><input class="input" id="newPassword" type="password" autocomplete="new-password"></div><div class="field"><label for="confirmPassword">确认密码</label><input class="input" id="confirmPassword" type="password" autocomplete="new-password"></div><p class="settings-hint">修改后注销当前账号的全部登录会话，项目说明中的默认密码保持不变。</p><button class="btn btn-primary btn-block" id="changePassword" type="submit">保存密码</button></form></dialog>
 <footer class="site-credit" aria-label="网站署名">
   <strong>长春中学新媒体中心</strong>
   <p>by网络部x长春中学科创社</p>

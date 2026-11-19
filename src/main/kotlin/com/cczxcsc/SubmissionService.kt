@@ -26,15 +26,7 @@ class SubmissionService(private val repo: SubmissionRepository, private val audi
     }
 
     fun track(code: String, author: String): Map<String, Any?> {
-        if (code.isBlank()) throw ApiError(400, "请输入投稿编号")
-        if (author.isBlank()) throw ApiError(400, "请输入投稿时填写的姓名")
-        val row = repo.byCode(code.trim().uppercase()) ?: throw ApiError(404, "编号与姓名不匹配，请核对后再试")
-        if (row.author != author.trim()) throw ApiError(404, "编号与姓名不匹配，请核对后再试")
-        // 保留旧查询 API 兼容性，不返回联系方式或正文。
-        return mapOf("code" to row.code, "author" to row.author, "title" to row.title, "category" to row.category,
-            "status" to row.status, "note" to row.note, "score" to row.score, "broadcast_date" to row.broadcastDate,
-            "created_at" to row.createdAt, "updated_at" to row.updatedAt,
-            "period" to row.period, "broadcast_time" to row.broadcastTime)
+        throw ApiError(410, "公开稿件进度查询已关闭，请联系新媒体中心")
     }
 
     fun list(params: Map<String, String>): Map<String, Any> {
@@ -122,7 +114,11 @@ class SubmissionService(private val repo: SubmissionRepository, private val audi
             "by_status" to groups("status"), "by_category" to groups("category"), "by_class" to classes, "weekly" to weekly)
     }
 
-    fun exportItems(params: Map<String, String>): List<Submission> = repo.list(repo.filters(params))
+    fun exportItems(params: Map<String, String>): List<Submission> {
+        val filters = repo.filters(params)
+        if (repo.count(filters) > 5000) throw ApiError(413, "一次最多导出 5000 篇稿件，请缩小日期或筛选范围")
+        return repo.list(filters)
+    }
 
     fun reviewSummary(): Map<String, Any> {
         val ids = repo.jdbc.queryForList("SELECT id FROM submissions WHERE status='待审核' ORDER BY id", Long::class.java)
@@ -131,6 +127,7 @@ class SubmissionService(private val repo: SubmissionRepository, private val audi
 
     @Transactional
     fun batch(body: BatchInput, actor: String = Passwords.DEFAULT_ACCOUNT): Map<String, Any> {
+        if (body.ids.size > 1000) throw ApiError(413, "一次最多处理 1000 篇稿件，请分批操作")
         val ids = body.ids.distinct()
         if (ids.isEmpty() || ids.any { it <= 0 }) throw ApiError(400, "请先选择稿件")
         if (body.action !in setOf("approve", "reject", "schedule", "played", "clear_schedule", "reopen")) throw ApiError(400, "操作不正确")

@@ -85,7 +85,8 @@ class ProjectDocumentTest {
         auth.changePassword("cczx123456", "AnotherAdmin123")
         auth.initialize()
         assertFalse(Files.exists(doc))
-        auth.changePassword("AnotherAdmin123", "cczx123456")
+        assertThrows(ApiError::class.java) { auth.changePassword("AnotherAdmin123", "cczx123456") }
+        auth.resetPassword()
         assertEquals("cczx123456", auth.currentPassword())
     }
 

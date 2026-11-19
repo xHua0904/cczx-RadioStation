@@ -24,7 +24,9 @@ class DatabaseInitializer(
         val oldTable = jdbc.queryForObject("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='submissions'", Int::class.java) == 1
         val columns = if (oldTable) jdbc.queryForList("PRAGMA table_info(submissions)").map { it["name"].toString() }.toSet() else emptySet()
         val addedColumns = listOf("song_name", "artist", "song_url", "period", "broadcast_time", "reviewed_by", "scheduled_by", "updated_by")
-        if (oldTable && addedColumns.any { it !in columns }) {
+        val versionFive = jdbc.queryForObject("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='schema_versions'", Int::class.java) == 1 &&
+            jdbc.queryForObject("SELECT COUNT(*) FROM schema_versions WHERE version=5", Int::class.java) == 1
+        if (oldTable && (addedColumns.any { it !in columns } || !versionFive)) {
             // VACUUM INTO 会包含 WAL 中已提交的数据，升级前留下完整备份。
             Files.createDirectories(Path.of(dataDir))
             val stamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss_SSS"))
@@ -54,6 +56,15 @@ class DatabaseInitializer(
                 jdbc.execute("ALTER TABLE sessions ADD COLUMN username TEXT NOT NULL DEFAULT ''")
                 jdbc.update("DELETE FROM sessions")
             }
+            if ("last_seen_at" !in sessionColumns) {
+                jdbc.execute("ALTER TABLE sessions ADD COLUMN last_seen_at TEXT NOT NULL DEFAULT ''")
+                jdbc.update("DELETE FROM sessions")
+            }
+            val accountColumns = jdbc.queryForList("PRAGMA table_info(accounts)").map { it["name"].toString() }
+            if ("role" !in accountColumns) {
+                jdbc.execute("ALTER TABLE accounts ADD COLUMN role TEXT NOT NULL DEFAULT 'editor' CHECK (role IN ('admin','editor'))")
+                jdbc.update("UPDATE accounts SET role='admin' WHERE username=?", Passwords.DEFAULT_ACCOUNT)
+            }
             val messageColumns = jdbc.queryForList("PRAGMA table_info(announcements)").map { it["name"].toString() }
             for (name in listOf("updated_by", "updated_at")) {
                 if (name !in messageColumns) jdbc.execute("ALTER TABLE announcements ADD COLUMN $name TEXT NOT NULL DEFAULT ''")
@@ -62,6 +73,7 @@ class DatabaseInitializer(
             jdbc.update("INSERT OR IGNORE INTO schema_versions(version, applied_at) VALUES(2, ?)", nowIso())
             jdbc.update("INSERT OR IGNORE INTO schema_versions(version, applied_at) VALUES(3, ?)", nowIso())
             jdbc.update("INSERT OR IGNORE INTO schema_versions(version, applied_at) VALUES(4, ?)", nowIso())
+            jdbc.update("INSERT OR IGNORE INTO schema_versions(version, applied_at) VALUES(5, ?)", nowIso())
         }
     }
 }

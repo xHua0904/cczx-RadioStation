@@ -31,21 +31,21 @@ abstract class ApiContract {
     }
     private fun data(response: HttpResponse<ByteArray>): JsonNode = json.readTree(response.body())
     private fun login(): String {
-        val response = request("POST", "/api/admin/login", mapOf("username" to "新媒体中心", "password" to "cczx123456"))
+        val response = request("POST", "/api/admin/login", mapOf("username" to "新媒体中心", "password" to "ApiTestStrong123"))
         assertEquals(200, response.statusCode())
         return data(response).path("token").asText()
     }
 
     @Test fun `操作人来自登录账号且审批排期消息删除均可追溯`() {
-        auth.addAccount("网络部"); auth.addAccount("科创社")
+        auth.addAccount("网络部", "admin"); auth.addAccount("科创社", "admin"); auth.changePassword("cczx123456", "ApiTestStrong123", "网络部"); auth.changePassword("cczx123456", "ApiTestStrong123", "科创社")
         fun accountLogin(name: String): String {
-            val response = request("POST", "/api/admin/login", mapOf("username" to name, "password" to "cczx123456"))
+            val response = request("POST", "/api/admin/login", mapOf("username" to name, "password" to "ApiTestStrong123"))
             assertEquals(200, response.statusCode()); assertEquals(name, data(response).path("username").asText())
             return data(response).path("token").asText()
         }
         val network = accountLogin("网络部"); val science = accountLogin("科创社")
         assertEquals("网络部", data(request("GET", "/api/admin/me", token = network)).path("username").asText())
-        assertEquals(400, request("POST", "/api/admin/login", mapOf("password" to "cczx123456")).statusCode())
+        assertEquals(400, request("POST", "/api/admin/login", mapOf("password" to "ApiTestStrong123")).statusCode())
         assertEquals(401, request("GET", "/api/admin/audit").statusCode())
         assertEquals(404, request("POST", "/api/admin/accounts", mapOf("username" to "注册账号"), network).statusCode())
         assertEquals(200, request("POST", "/api/submissions", song).statusCode())
@@ -82,10 +82,8 @@ abstract class ApiContract {
         val response = request("POST", "/api/submissions", song + ("status" to "已播出"))
         assertEquals(200, response.statusCode())
         val code = data(response).path("code").asText()
-        val track = data(request("POST", "/api/submissions/track", mapOf("code" to code, "author" to "测试同学")))
-        assertEquals("待审核", track.path("status").asText())
-        assertEquals(Weeks.current().key, track.path("period").asText()); assertFalse(track.has("contact"))
-        assertEquals(404, request("POST", "/api/submissions/track", mapOf("code" to code, "author" to "其他同学")).statusCode())
+        assertEquals(410, request("POST", "/api/submissions/track", mapOf("code" to code, "author" to "测试同学")).statusCode())
+        assertEquals(410, request("POST", "/api/submissions/track", mapOf("code" to code, "author" to "其他同学")).statusCode())
         val token = login()
         val server = data(request("GET", "/api/admin/server", token = token))
         assertTrue(server.path("server_ips").isArray)
@@ -99,7 +97,7 @@ abstract class ApiContract {
         val id = item.path("id").asLong()
         assertEquals(400, request("PATCH", "/api/admin/submissions/$id", mapOf("broadcast_date" to "2026-02-30"), token).statusCode())
         assertEquals(200, request("PATCH", "/api/admin/submissions/$id", mapOf("status" to "已通过", "score" to 88, "broadcast_date" to "2026-12-01", "note" to "已安排"), token).statusCode())
-        val approved = data(request("POST", "/api/submissions/track", mapOf("code" to code, "author" to "测试同学")))
+        val approved = data(request("GET", "/api/admin/submissions", token = token)).path("items").first()
         assertEquals("已通过", approved.path("status").asText()); assertEquals("已安排", approved.path("note").asText())
         val stats = data(request("GET", "/api/admin/stats", token = token))
         assertEquals(1, stats.path("adopted").asInt()); assertEquals(8, stats.path("weekly").size())
@@ -134,7 +132,8 @@ abstract class ApiContract {
         val response = request("POST", "/api/submissions", mapOf("author" to "测试同学", "class_name" to "高一一班", "content" to "这是一篇需要保留兼容的旧格式校园稿件。"))
         assertEquals(200, response.statusCode())
         val code = data(response).path("code").asText()
-        val result = data(request("GET", "/api/submissions/track?code=$code&author=${java.net.URLEncoder.encode("测试同学", Charsets.UTF_8)}"))
+        assertEquals(410, request("GET", "/api/submissions/track?code=$code&author=${java.net.URLEncoder.encode("测试同学", Charsets.UTF_8)}").statusCode())
+        val result = data(request("GET", "/api/admin/submissions", token = login())).path("items").first()
         assertEquals("其他", result.path("category").asText())
         assertEquals(Weeks.current().key, result.path("period").asText())
     }
