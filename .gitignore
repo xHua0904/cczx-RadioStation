@@ -1,7 +1,5 @@
 # 正式数据、密码与本机环境
 /data/
-/secrets/
-*.key
 /PROJECT.md
 /.project-info-*.md
 .env

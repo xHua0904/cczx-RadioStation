@@ -70,7 +70,7 @@ test("公告按块展示日期和实际发布者，内容作为文本呈现", as
   const p = await page([{ title: "下一期投稿计划", content: "<script>alert(1)</script>", kind: "投稿计划", period: "2026-W46", publisher: "网络部", published_at: "2026-11-15T12:00:00+08:00" }]);
   const card = p.elements.get("#announcementFeed").children[0];
   assert.equal(card.className, "announcement-card");
-  assert.equal(card.children.find(x => x.className === "announcement-meta").textContent, "2026-11-15 · 网络部");
+  assert.equal(card.children.find(x => x.className === "announcement-meta").textContent, "2026-11-15 · 发布者：网络部");
   assert.equal(card.children.find(x => x.className === "announcement-content").textContent, "<script>alert(1)</script>");
 });
 

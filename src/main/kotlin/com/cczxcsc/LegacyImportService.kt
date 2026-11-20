@@ -51,7 +51,6 @@ class LegacyImportService(private val repo: SubmissionRepository, private val js
         }
         jdbc.update("DELETE FROM sessions")
         if (storage == "postgres") jdbc.queryForObject("SELECT setval(pg_get_serial_sequence('submissions','id'),COALESCE(MAX(id),1),MAX(id) IS NOT NULL) FROM submissions", Long::class.java)
-        auth.initialize()
-        println("已导入 ${rows.size()} 条投稿，旧管理员密码保持有效，旧登录会话已注销。")
+        println("已导入 ${rows.size()} 条投稿，现有账号密码不变，旧登录会话已注销；不会自动创建账号。")
     }
 }

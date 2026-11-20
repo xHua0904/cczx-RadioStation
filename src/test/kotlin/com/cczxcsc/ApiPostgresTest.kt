@@ -11,7 +11,7 @@ import java.nio.file.Path
 
 @Testcontainers(disabledWithoutDocker = true)
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = [
-    "app.admin-password=ApiTestStrong123", "app.submissions-per-minute=1000", "app.storage=postgres", "spring.flyway.enabled=true",
+    "app.submissions-per-minute=1000", "app.storage=postgres", "spring.flyway.enabled=true",
     "spring.flyway.locations=classpath:db/postgres", "spring.datasource.driver-class-name=org.postgresql.Driver",
     "spring.datasource.hikari.maximum-pool-size=5", "spring.datasource.hikari.connection-init-sql=SELECT 1"
 ])
@@ -23,7 +23,6 @@ class ApiPostgresTest : ApiContract() {
             registry.add("spring.datasource.username") { postgres.username }
             registry.add("spring.datasource.password") { postgres.password }
             registry.add("app.data-dir") { Files.createDirectories(Path.of("target/test-postgres")).toAbsolutePath().toString() }
-            registry.add("app.secrets-dir") { Files.createDirectories(Path.of("target/test-postgres")).toAbsolutePath().toString() }
         }
     }
 }

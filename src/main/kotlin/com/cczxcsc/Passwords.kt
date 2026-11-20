@@ -8,11 +8,10 @@ import javax.crypto.spec.PBEKeySpec
 
 object Passwords {
     const val DEFAULT_ADMIN_PASSWORD = "cczx123456"
-    const val DEFAULT_ACCOUNT = "新媒体中心"
-    fun validAdminPassword(password: String): Boolean = password.length in 10..64 && password.any(Char::isLetter) && password.any(Char::isDigit) && password.none(Char::isISOControl)
+    fun validAdminPassword(password: String): Boolean = password == DEFAULT_ADMIN_PASSWORD || password.length in 6..64
     private val random = SecureRandom()
     fun token(bytes: Int = 32): String = ByteArray(bytes).also(random::nextBytes).let { Base64.getUrlEncoder().withoutPadding().encodeToString(it) }
-    fun hash(password: String, salt: ByteArray = ByteArray(16).also(random::nextBytes), rounds: Int = 600_000): String {
+    fun hash(password: String, salt: ByteArray = ByteArray(16).also(random::nextBytes), rounds: Int = 120_000): String {
         val key = PBEKeySpec(password.toCharArray(), salt, rounds, 256)
         val digest = try { SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(key).encoded } finally { key.clearPassword() }
         return "pbkdf2_sha256\$$rounds\$${salt.toHex()}\$${digest.toHex()}"

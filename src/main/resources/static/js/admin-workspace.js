@@ -14,20 +14,9 @@
   function showError(message) { $("#workspaceError").textContent = message; $("#workspaceError").hidden = !message; }
   function setAccount(username) {
     state.username = username; $("#currentAccount").textContent = "当前账号：" + username;
-    $("#messagePublisher").textContent = username; $("#username").value = username;
+    $("#username").value = username; updatePublisher();
   }
-  function passwordValid(value) { return value.length >= 10 && value.length <= 64 && /\p{L}/u.test(value) && /\p{N}/u.test(value) && value !== "cczx123456" && !/[\x00-\x1f\x7f]/.test(value); }
-  function requirePasswordChange(data, oldPassword = "") {
-    if (data.username) setAccount(data.username);
-    $("#dashView").hidden = $("#loginView").hidden = true; $("#changeRequiredView").hidden = false;
-    $("#initialAccount").textContent = "账号：" + state.username; $("#initialPasswordForm").reset(); $("#initialOldPassword").value = oldPassword; $("#initialPasswordError").textContent = "";
-  }
-  async function enterSession(data, oldPassword = "") {
-    setAccount(data.username);
-    if (data.initial_password) { requirePasswordChange(data, oldPassword); return; }
-    $("#changeRequiredView").hidden = $("#loginView").hidden = true; $("#dashView").hidden = false;
-    await showView("dashboard");
-  }
+  function updatePublisher() { $("#messagePublisher").textContent = $("#messagePublishAs").value === "media_center" ? "新媒体中心" : state.username; }
   function operatorMeta(row) {
     return [["审稿人", row.reviewed_by], ["排期人", row.scheduled_by], ["最近操作人", row.updated_by]]
       .filter(([, name]) => name).map(([label, name]) => esc(label) + "：" + esc(name)).join("<br>");
@@ -40,12 +29,12 @@
     $("#auditPrevious").disabled = data.page <= 1; $("#auditNext").disabled = data.page >= data.pages;
   }
   function loginView(message = "") {
-    state.token = ""; state.username = ""; sessionStorage.removeItem("gb_token"); $("#currentAccount").textContent = ""; $("#messagePublisher").textContent = ""; $("#dashView").hidden = $("#changeRequiredView").hidden = true; $("#initialPasswordForm").reset(); $("#loginView").hidden = false; $("#loginError").textContent = message;
+    state.token = ""; state.username = ""; sessionStorage.removeItem("gb_token"); $("#currentAccount").textContent = ""; $("#messagePublisher").textContent = ""; $("#dashView").hidden = true; $("#loginView").hidden = false; $("#loginError").textContent = message;
   }
   async function api(path, options = {}) {
     const response = await fetch(path, { ...options, headers: { "Content-Type": "application/json", ...(state.token ? { Authorization: "Bearer " + state.token } : {}), ...(options.headers || {}) } });
     const data = await response.json();
-    if (!response.ok) { if (response.status === 401 && path !== "/api/admin/login") loginView("登录已过期，请重新登录。"); if (data.code === "PASSWORD_CHANGE_REQUIRED") requirePasswordChange({}); throw new Error(data.error || "请求失败"); }
+    if (!response.ok) { if (response.status === 401 && path !== "/api/admin/login") loginView("登录已过期，请重新登录。"); throw new Error(data.error || "请求失败"); }
     return data;
   }
   const post = (path, body) => api(path, { method: "POST", body: JSON.stringify(body) });
@@ -144,7 +133,7 @@
     $("#approveSelected").disabled = $("#rejectSelected").disabled = !active;
     $("#scheduleSelected").disabled = $("#markPlayed").disabled = !active || !selected.every(row => row.status === "已通过");
     $("#clearSchedule").disabled = !active || !selected.every(row => row.broadcast_date && ["已通过", "已播出"].includes(row.status));
-    $("#saveSelected").disabled = !single || state.busy; $("#deleteSelected").disabled = !single || state.busy;
+    $("#saveSelected").disabled = $("#deleteSelected").disabled = !single || state.busy;
     $("#reopenSelected").disabled = !active;
     $("#approveAllButton").disabled = state.busy || state.pending === 0;
     $$("[data-calendar-status], [data-save-calendar-status]").forEach(control => { control.disabled = state.busy; });
@@ -240,7 +229,7 @@
   }
   $("#loginForm").addEventListener("submit", async event => {
     event.preventDefault(); $("#loginBtn").disabled = true;
-    try { const old = $("#password").value; const data = await post("/api/admin/login", { username: $("#username").value.trim(), password: old }); state.token = data.token; sessionStorage.setItem("gb_token", data.token); $("#password").value = ""; await enterSession(data, old); }
+    try { const data = await post("/api/admin/login", { username: $("#username").value.trim(), password: $("#password").value }); state.token = data.token; setAccount(data.username); sessionStorage.setItem("gb_token", data.token); $("#password").value = ""; $("#loginView").hidden = true; $("#dashView").hidden = false; await showView("dashboard"); }
     catch (error) { $("#loginError").textContent = error.message; if (state.token) showError(error.message); }
     finally { $("#loginBtn").disabled = false; }
   });
@@ -272,10 +261,11 @@
     try { await post("/api/admin/submissions", { author: $("#newAuthor").value.trim(), class_name: $("#newClass").value.trim(), content, contact: $("#newContact").value.trim() }); $("#newDialog").close(); toast("已登记，等待审批"); await showView("review"); } catch (error) { toast(error.message, true); }
     finally { $("#createManuscript").disabled = false; }
   });
+  $("#messagePublishAs").addEventListener("change", updatePublisher);
   $("#messageForm").addEventListener("submit", async event => {
-    event.preventDefault(); const body = { title: $("#messageTitle").value.trim(), content: $("#messageContent").value.trim(), kind: $("#messageKind").value };
+    event.preventDefault(); const body = { title: $("#messageTitle").value.trim(), content: $("#messageContent").value.trim(), kind: $("#messageKind").value, publish_as: $("#messagePublishAs").value };
     if (!body.title || !body.content) return toast("请填写消息标题和内容。", true); $("#publishMessage").disabled = true;
-    try { await post("/api/admin/announcements", body); $("#messageForm").reset(); toast("消息已发布到公告栏"); await loadMessages(); } catch (error) { toast(error.message, true); }
+    try { await post("/api/admin/announcements", body); $("#messageForm").reset(); updatePublisher(); toast("消息已发布到公告栏"); await loadMessages(); } catch (error) { toast(error.message, true); }
     finally { $("#publishMessage").disabled = false; }
   });
   $("#messageHistory").addEventListener("click", async event => {
@@ -287,22 +277,13 @@
   });
   $("#btnSettings").addEventListener("click", () => { $("#passwordForm").reset(); $("#settingsDialog").showModal(); });
   $("#passwordForm").addEventListener("submit", async event => {
-    event.preventDefault(); const password = $("#newPassword").value; if (!passwordValid(password) || password !== $("#confirmPassword").value || password === $("#oldPassword").value) return toast("新密码至少 10 位且包含字母和数字，不能使用默认密码或原密码，两次输入须相同。", true);
+    event.preventDefault(); const password = $("#newPassword").value; if (password.length < 6 || password.length > 64 || password !== $("#confirmPassword").value) return toast("新密码应为 6–64 位，并确认两次输入相同。", true);
     $("#changePassword").disabled = true;
     try { await post("/api/admin/password", { old_password: $("#oldPassword").value, new_password: password }); $("#settingsDialog").close(); loginView("密码已更新，请重新登录。项目说明中的默认密码保持不变。"); } catch (error) { toast(error.message, true); }
     finally { $("#changePassword").disabled = false; }
   });
   $("#btnLogout").addEventListener("click", async () => { try { await post("/api/admin/logout", {}); } catch (_) { /* 会话过期也返回登录页 */ } loginView(); });
-  $("#initialLogout").addEventListener("click", async () => { try { await post("/api/admin/logout", {}); } catch (_) { /* 退出过期会话时仍返回登录页 */ } loginView(); });
-  $("#initialPasswordForm").addEventListener("submit", async event => {
-    event.preventDefault(); const old = $("#initialOldPassword").value, password = $("#initialNewPassword").value;
-    if (!passwordValid(password) || password !== $("#initialConfirmPassword").value || password === old) { $("#initialPasswordError").textContent = "新密码至少 10 位且包含字母和数字，不能使用默认密码或原密码，两次输入须相同。"; return; }
-    $("#initialPasswordSave").disabled = true;
-    try { await post("/api/admin/password", { old_password: old, new_password: password }); loginView("密码已更新，请使用新密码重新登录。"); }
-    catch (error) { $("#initialPasswordError").textContent = error.message; }
-    finally { $("#initialPasswordSave").disabled = false; }
-  });
   if (location.protocol === "file:") { loginView("请按照 README.md 启动项目，再通过 http://127.0.0.1:8000/admin 打开后台。"); return; }
-  if (state.token) { api("/api/admin/me").then(data => enterSession(data)).catch(error => { if (state.token) loginView(error.message); }); }
+  if (state.token) { api("/api/admin/me").then(data => { setAccount(data.username); $("#dashView").hidden = false; return showView("dashboard"); }).catch(error => { if (state.token) showError(error.message); }); }
   else loginView();
 })();

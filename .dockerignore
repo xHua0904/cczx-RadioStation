@@ -4,8 +4,6 @@ target
 .git
 .env
 data
-secrets
-*.key
 legacy
 shots
 tests

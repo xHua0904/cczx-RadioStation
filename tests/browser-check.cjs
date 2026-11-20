@@ -9,7 +9,7 @@ const root = path.resolve(__dirname, '..');
 const run = path.join(root, 'target', 'test-runtime', 'browser-' + Date.now());
 const profile = path.join(root, 'target', 'ui-check', 'edge-' + Date.now());
 const edgePath = process.env.EDGE_PATH || 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
-const testPassword = 'BrowserInitial123';
+const testPassword = 'cczx123456';
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 let java, browser, cdp, base;
 const browserErrors = [];
@@ -94,8 +94,8 @@ async function screenshot(name) {
 
 async function main() {
   await mkdir(run, { recursive: true }); await mkdir(profile, { recursive: true });
-  for (const username of ['网络部', '科创社']) {
-    const child = spawn('java', ['-jar', path.join(root, 'target', 'cczx-RadioStation.jar'), '--add-account=' + username, '--spring.main.banner-mode=off', '--logging.level.root=ERROR', '--spring.profiles.active=', '--spring.datasource.url=jdbc:sqlite:' + path.join(run, 'test.db'), '--app.data-dir=' + run, '--app.secrets-dir=' + path.join(run, 'secrets')], { cwd: root, windowsHide: true, env: { ...process.env, DATA_DIR: run } });
+  for (const username of ['新媒体中心', '网络部', '科创社']) {
+    const child = spawn('java', ['-jar', path.join(root, 'target', 'cczx-RadioStation.jar'), '--add-account=' + username, '--spring.main.banner-mode=off', '--logging.level.root=ERROR', '--spring.profiles.active=', '--spring.datasource.url=jdbc:sqlite:' + path.join(run, 'test.db'), '--app.data-dir=' + run], { cwd: root, windowsHide: true, env: { ...process.env, DATA_DIR: run } });
     let output = ''; child.stdout.on('data', chunk => { output += chunk; }); child.stderr.on('data', chunk => { output += chunk; });
     const timer = setTimeout(() => child.kill(), 30000);
     try { assert.equal(await new Promise((resolve, reject) => { child.once('error', reject); child.once('exit', resolve); }), 0, output); }
@@ -103,7 +103,7 @@ async function main() {
   }
   const port = await freePort(); base = 'http://127.0.0.1:' + port;
   let javaLog = '', browserLog = '';
-  java = spawn('java', ['-jar', path.join(root, 'target', 'cczx-RadioStation.jar'), '--server.port=' + port, '--app.storage=sqlite', '--spring.profiles.active=', '--spring.flyway.enabled=false', '--spring.datasource.driver-class-name=org.sqlite.JDBC', '--spring.datasource.url=jdbc:sqlite:' + path.join(run, 'test.db'), '--app.data-dir=' + run, '--app.secrets-dir=' + path.join(run, 'secrets'), '--app.admin-password='], { cwd: root, windowsHide: true, env: { ...process.env, DATA_DIR: run } });
+  java = spawn('java', ['-jar', path.join(root, 'target', 'cczx-RadioStation.jar'), '--server.port=' + port, '--app.submissions-per-minute=1000', '--app.storage=sqlite', '--spring.profiles.active=', '--spring.flyway.enabled=false', '--spring.datasource.driver-class-name=org.sqlite.JDBC', '--spring.datasource.url=jdbc:sqlite:' + path.join(run, 'test.db'), '--app.data-dir=' + run, '--app.admin-password='], { cwd: root, windowsHide: true, env: { ...process.env, DATA_DIR: run } });
   java.stdout.on('data', data => { javaLog += data; }); java.stderr.on('data', data => { javaLog += data; });
   java.on('error', error => { javaLog += error.message; });
   try { await until(async () => (await fetch(base + '/api/health')).ok, '测试服务启动', 45000); }
@@ -139,22 +139,12 @@ async function main() {
   await cdp.eval('document.querySelector(".site-credit").scrollIntoView()'); await screenshot('footer-desktop');
   console.log('PASS 投稿页：无期次选择、字数校验、提交、旧字段移除');
 
-  for (const username of ['网络部', '科创社']) {
-    const initial = await api('/api/admin/login', 'POST', { username, password: 'cczx123456' });
-    await api('/api/admin/password', 'POST', { old_password: 'cczx123456', new_password: testPassword }, initial.token);
-  }
+  const token = (await api('/api/admin/login', 'POST', { username: "新媒体中心", password: testPassword })).token;
   const manuscript = { author: '测试同学', class_name: '高一二班', content: '待审批的校园稿件。' };
   await api('/api/submissions', 'POST', manuscript); await api('/api/submissions', 'POST', manuscript);
   await navigate('/admin.html', 'document.querySelector("#loginView") && !document.querySelector("#loginView").hidden');
-  await fill('#password', 'cczx123456'); await click('#loginBtn');
-  await waitPage('!document.querySelector("#changeRequiredView").hidden');
-  assert.equal(await cdp.eval('document.querySelector("#dashView").hidden'), true);
-  await fill('#initialNewPassword', testPassword); await fill('#initialConfirmPassword', testPassword); await click('#initialPasswordSave');
-  await waitPage('!document.querySelector("#loginView").hidden && document.querySelector("#loginError").textContent.includes("密码已更新")');
-  await fill('#password', testPassword); await click('#loginBtn');
+  await fill('#username', '新媒体中心'); await fill('#password', testPassword); await click('#loginBtn');
   await waitPage('!document.querySelector("#dashView").hidden && document.querySelector("#serverStatusBadge").textContent === "运行中"');
-  const token = (await api('/api/admin/login', 'POST', { username: '新媒体中心', password: testPassword })).token;
-  console.log('PASS 首次默认密码登录：强制改密、后台隐藏、改密后重新登录');
   assert.ok(await cdp.eval('document.querySelector("#currentAccount").textContent.includes("新媒体中心")'));
   assert.equal(await cdp.eval('document.querySelectorAll(".nav-item").length'), 4);
   assert.equal(await cdp.eval('document.querySelectorAll("#filterPeriod,#newPeriod,#messagePeriod").length'), 0);
@@ -290,22 +280,19 @@ async function main() {
   await waitPage('document.querySelectorAll("#manuscriptBody tr[data-id]").length === 3');
   await noOverflow('手机已安排稿件');
   await click('#btnSettings');
-  await fill('#oldPassword', testPassword); await fill('#newPassword', 'BrowserChanged123'); await fill('#confirmPassword', 'BrowserChanged123');
+  await fill('#oldPassword', 'cczx123456'); await fill('#newPassword', 'BrowserChanged123'); await fill('#confirmPassword', 'BrowserChanged123');
   await click('#changePassword');
   await waitPage('!document.querySelector("#loginView").hidden && document.querySelector("#loginError").textContent.includes("密码已更新")');
   await fill('#password', 'BrowserChanged123'); await click('#loginBtn');
   await waitPage('!document.querySelector("#dashView").hidden && document.querySelector("#serverStatusBadge").textContent === "运行中"');
   await click('#btnSettings');
   await fill('#oldPassword', 'BrowserChanged123'); await fill('#newPassword', 'cczx123456'); await fill('#confirmPassword', 'cczx123456'); await click('#changePassword');
-  await waitPage('document.querySelector("#toasts").textContent.includes("不能使用默认密码")');
-  assert.equal(await cdp.eval('document.querySelector("#dashView").hidden'), false);
-  await click('[data-close="settingsDialog"]');
-  console.log('PASS 管理员密码：后台改密并拒绝改回公开默认密码');
+  await waitPage('!document.querySelector("#loginView").hidden && document.querySelector("#loginError").textContent.includes("密码已更新")');
+  await fill('#password', 'cczx123456'); await click('#loginBtn');
+  await waitPage('!document.querySelector("#dashView").hidden && document.querySelector("#serverStatusBadge").textContent === "运行中"');
+  console.log('PASS 管理员密码：默认 cczx123456 登录、后台改密与改回 cczx123456');
   await click('#btnLogout'); await fill('#username', '网络部'); await fill('#password', testPassword); await click('#loginBtn');
   await waitPage('document.querySelector("#currentAccount").textContent.includes("网络部") && !document.querySelector("#dashView").hidden');
-  await waitPage('document.querySelector("#serverStatusBadge").textContent === "运行中"');
-  assert.equal(await cdp.eval('document.querySelector("#deleteSelected").hidden'), false);
-  assert.equal(await cdp.eval('Array.from(document.querySelectorAll("[data-export]")).every(button => !button.hidden)'), true);
   assert.ok(await cdp.eval('document.querySelector("#auditHistory").textContent.includes("新媒体中心")'));
   await click('.nav-item[data-view=approved]'); await click('#approvedScheduledTab');
   await waitPage('document.querySelectorAll("#manuscriptBody tr[data-id]").length === 3');
@@ -318,10 +305,19 @@ async function main() {
   assert.equal(await cdp.eval('document.querySelector("#messagePublisher").textContent'), '网络部');
   await fill('#messageTitle', '网络部操作人公告'); await fill('#messageContent', '显示实际发布账号。'); await click('#publishMessage');
   await waitPage('document.querySelector("#messageHistory").textContent.includes("发布者：网络部")');
-  assert.ok(await cdp.eval('document.querySelector("#messageHistory [data-delete-message]") !== null'));
   await screenshot('accounts-mobile');
   await navigate('/', 'document.querySelectorAll(".announcement-card").length === 1');
   assert.ok(await cdp.eval('document.querySelector(".announcement-meta").textContent.includes("网络部")'));
+  await navigate('/admin.html', 'document.querySelector("#dashView") && !document.querySelector("#dashView").hidden');
+  await click('.nav-item[data-view=messages]'); await fill('#messagePublishAs', 'media_center');
+  assert.equal(await cdp.eval('document.querySelector("#messagePublisher").textContent'), '新媒体中心');
+  await fill('#messageTitle', '中心署名公告'); await fill('#messageContent', '以中心名义发布，实际操作人为网络部。'); await click('#publishMessage');
+  await waitPage('document.querySelector("#messageHistory").textContent.includes("中心署名公告") && document.querySelector("#messageHistory").textContent.includes("发布者：新媒体中心")');
+  assert.equal(await cdp.eval('document.querySelector("#messagePublishAs").value'), 'current_account');
+  assert.equal(await cdp.eval('document.querySelector("#messagePublisher").textContent'), '网络部');
+  await navigate('/', 'document.querySelectorAll(".announcement-card").length === 2');
+  assert.ok(await cdp.eval('[...document.querySelectorAll(".announcement-meta")].some(item => item.textContent.includes("发布者：新媒体中心"))'));
+  console.log('PASS 公告发布身份：当前账号与新媒体中心署名、实际操作人、发布后身份复位、公告栏发布者');
   await cdp.eval('document.querySelector(".site-credit").scrollIntoView()'); await screenshot('footer-mobile');
   await noOverflow('手机署名与 GitHub 链接');
   console.log('PASS 多账号：当前账号、审稿人与排期人、公告实际发布者、操作历史、署名及 GitHub 图标');

@@ -1,16 +1,6 @@
 server:
   port: ${PORT:8000}
-  address: ${BIND_ADDRESS:127.0.0.1}
-  forward-headers-strategy: none
   max-http-request-header-size: 16KB
-  tomcat:
-    threads:
-      max: 50
-      min-spare: 5
-    max-connections: 200
-    accept-count: 50
-    connection-timeout: 10s
-    max-swallow-size: 64KB
 spring:
   application:
     name: cczx-RadioStation
@@ -30,10 +20,5 @@ spring:
 app:
   storage: sqlite
   data-dir: ${DATA_DIR:./data}
-  secrets-dir: ${SECRETS_DIR:./secrets}
-  admin-password: ${BROADCAST_ADMIN_PASSWORD:cczx123456}
-  trusted-proxies: ${TRUSTED_PROXY_CIDRS:}
-  require-https: ${REQUIRE_HTTPS:false}
   submissions-per-minute: ${SUBMISSIONS_PER_MINUTE:20}
-  session-max-age-seconds: 7200
-  session-idle-seconds: 1800
+  trusted-proxies: ${TRUSTED_PROXY_CIDRS:}

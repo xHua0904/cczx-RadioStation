@@ -28,13 +28,15 @@ class LegacyImportTest {
             "settings" to listOf(mapOf("key" to "admin_hash", "value" to hash)), "counters" to emptyList<Any>())
         val file = directory.resolve("legacy.json")
         Files.writeString(file, json.writeValueAsString(payload))
-        val auth = AuthService(jdbc, transactions, "", PasswordVault(directory.toString()))
+        val auth = AuthService(jdbc, transactions, PasswordVault(directory.toString()))
+        auth.addAccount("迁移管理员"); auth.changePassword("cczx123456", "旧密码Test123", "迁移管理员")
         val importer = LegacyImportService(repo, json, auth, "sqlite")
         transactions.executeWithoutResult { importer.importFile(file) }
         assertEquals("保留旧稿件内容", repo.byId(42)?.content)
         assertEquals("GB261115043", transactions.execute { repo.nextCode("2026-11-15") })
-        assertNotNull(auth.login("旧密码Test123", "local")["token"])
+        assertNotNull(auth.login("旧密码Test123", "local", "迁移管理员")["token"])
         assertThrows(IllegalArgumentException::class.java) { transactions.executeWithoutResult { importer.importFile(file) } }
         assertEquals(1L, repo.count())
+        assertEquals(listOf("迁移管理员"), auth.listAccounts())
     }
 }

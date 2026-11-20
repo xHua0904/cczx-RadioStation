@@ -15,23 +15,20 @@ class Application {
     @Bean
     @Order(1)
     fun startup(auth: AuthService, imports: LegacyImportService, demo: DemoService) = ApplicationRunner { args: ApplicationArguments ->
-        require(listOf("import-legacy", "reset-password", "show-password", "demo-data", "add-account", "list-accounts", "set-role").count(args::containsOption) <= 1) { "一次只能指定一个管理命令" }
+        require(listOf("import-legacy", "reset-password", "show-password", "demo-data", "add-account", "delete-account", "list-accounts").count(args::containsOption) <= 1) { "一次只能指定一个管理命令" }
         require(!args.containsOption("account") || args.containsOption("show-password") || args.containsOption("reset-password")) { "--account 仅用于查询或重置密码" }
         fun value(option: String): String = args.getOptionValues(option)?.singleOrNull()?.takeIf { it.isNotBlank() }
             ?: throw IllegalArgumentException("--$option 需要指定一个非空值")
-        val username = if (args.containsOption("account")) value("account") else Passwords.DEFAULT_ACCOUNT
-        require(!args.containsOption("role") || args.containsOption("add-account") || args.containsOption("set-role")) { "--role 仅用于添加账号或设置角色" }
-        val role = if (args.containsOption("role")) value("role") else "admin"
-        if (!args.containsOption("import-legacy")) auth.initialize()
+        val username = if (args.containsOption("account")) value("account") else ""
+        require(!(args.containsOption("show-password") || args.containsOption("reset-password")) || username.isNotEmpty()) { "没有默认账号，请使用 --account=账号 指定目标账号" }
         when {
             args.containsOption("import-legacy") -> imports.importFile(Path.of(args.getOptionValues("import-legacy").first()))
             args.containsOption("reset-password") -> auth.resetPassword(username)
             args.containsOption("show-password") -> println("账号 $username 的密码：${auth.currentPassword(username)}")
-            args.containsOption("add-account") -> auth.addAccount(value("add-account"), role)
-            args.containsOption("set-role") -> { require(args.containsOption("role")) { "设置角色时必须指定 --role" }; auth.setRole(value("set-role"), role) }
-            args.containsOption("list-accounts") -> auth.listAccounts().forEach { println("$it\t${auth.accountRole(it)}") }
-            args.containsOption("demo-data") -> { auth.initialize(); demo.generate() }
-            else -> auth.initialize()
+            args.containsOption("add-account") -> auth.addAccount(value("add-account"))
+            args.containsOption("delete-account") -> auth.deleteAccount(value("delete-account"))
+            args.containsOption("list-accounts") -> auth.listAccounts().let { names -> if (names.isEmpty()) println("暂无账号，请使用 --add-account=账号 添加。") else names.forEach { println("$it\t${AuthService.ADMIN_ROLE}") } }
+            args.containsOption("demo-data") -> demo.generate()
         }
     }
 }
@@ -39,9 +36,24 @@ class Application {
 fun main(args: Array<String>) {
     // Windows 管道的默认编码可能不同，统一命令输出为 UTF-8，支持中文密码。
     System.setOut(PrintStream(System.out, true, Charsets.UTF_8))
+    if ("--help" in args) {
+        println("""
+            启动：java -jar target/cczx-RadioStation.jar
+            添加账号：--add-account=账号（默认密码 cczx123456，全部为管理员）
+            列出账号：--list-accounts
+            删除账号：--delete-account=账号
+            查询密码：--show-password --account=账号
+            重置密码：--reset-password --account=账号
+            演示数据：--demo-data
+            旧数据导入：--import-legacy=文件路径
+            帮助：--help
+            无默认账号；管理命令执行后退出，不启动网站。
+        """.trimIndent())
+        return
+    }
     // 连接 SQLite 前先创建目录，避免首次启动时连接池找不到文件。
     Files.createDirectories(Path.of(System.getenv("DATA_DIR") ?: "./data"))
-    val command = args.any { it.substringBefore('=') in setOf("--import-legacy", "--reset-password", "--show-password", "--demo-data", "--add-account", "--list-accounts", "--set-role") }
+    val command = args.any { it.substringBefore('=') in setOf("--import-legacy", "--reset-password", "--show-password", "--demo-data", "--add-account", "--delete-account", "--list-accounts") }
     var launchArgs = if (command) args.filterNot { it.substringBefore('=') == "--spring.main.web-application-type" }.toTypedArray() + "--spring.main.web-application-type=none" else args
     if (args.any { it.substringBefore('=') == "--show-password" }) {
         if (args.none { it.substringBefore('=') == "--spring.main.banner-mode" }) launchArgs += "--spring.main.banner-mode=off"
