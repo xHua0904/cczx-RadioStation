@@ -67,7 +67,9 @@ abstract class ApiContract {
         assertEquals(200, request("DELETE", "/api/admin/announcements/$message", token = science).statusCode())
         assertEquals(200, request("DELETE", "/api/admin/submissions/$id", token = network).statusCode())
         val history = data(request("GET", "/api/admin/audit?target_type=submission&target_id=$id", token = network))
-        assertEquals(4, history.path("total").asInt())
+        assertEquals(5, history.path("total").asInt())
+        assertEquals("在线投稿", history.path("items").last().path("action").asText())
+        assertTrue(history.path("items").last().path("username").asText().startsWith("投稿人："))
         assertEquals("删除稿件", history.path("items").first().path("action").asText())
         assertEquals("网络部", history.path("items").first().path("username").asText())
         assertEquals(3, data(request("GET", "/api/admin/audit?target_type=announcement&target_id=$message", token = science)).path("total").asInt())
@@ -95,10 +97,10 @@ abstract class ApiContract {
         val listing = data(request("GET", "/api/admin/submissions", token = token))
         assertEquals(1, listing.path("total").asInt())
         val item = listing.path("items").first()
-        assertEquals("高一一班", item.path("class_name").asText())
+        assertEquals("高一1班", item.path("class_name").asText())
         val id = item.path("id").asLong()
         assertEquals(400, request("PATCH", "/api/admin/submissions/$id", mapOf("broadcast_date" to "2026-02-30"), token).statusCode())
-        assertEquals(200, request("PATCH", "/api/admin/submissions/$id", mapOf("status" to "已通过", "score" to 88, "broadcast_date" to "2026-12-01", "note" to "已安排"), token).statusCode())
+        assertEquals(200, request("PATCH", "/api/admin/submissions/$id", mapOf("status" to "已通过", "broadcast_date" to "2026-12-01", "note" to "已安排"), token).statusCode())
         val approved = data(request("POST", "/api/submissions/track", mapOf("code" to code, "author" to "测试同学")))
         assertEquals("已通过", approved.path("status").asText()); assertEquals("已安排", approved.path("note").asText())
         val stats = data(request("GET", "/api/admin/stats", token = token))
@@ -109,7 +111,7 @@ abstract class ApiContract {
         assertEquals(200, excel.statusCode())
         XSSFWorkbook(ByteArrayInputStream(excel.body())).use { workbook ->
             assertEquals(2, workbook.numberOfSheets); assertEquals(song["content"], workbook.getSheet("投稿明细").getRow(1).getCell(5).stringCellValue)
-            assertFalse((0 until workbook.getSheet("投稿明细").getRow(0).lastCellNum).any { workbook.getSheet("投稿明细").getRow(0).getCell(it).stringCellValue == "投稿期次" })
+            assertFalse((0 until workbook.getSheet("投稿明细").getRow(0).lastCellNum).any { workbook.getSheet("投稿明细").getRow(0).getCell(it).stringCellValue in setOf("投稿期次", "评分") })
         }
         assertEquals(200, request("DELETE", "/api/admin/submissions/$id", token = token).statusCode())
         assertEquals(0, data(request("GET", "/api/admin/stats", token = token)).path("total").asInt())
@@ -197,9 +199,41 @@ abstract class ApiContract {
         val response = request("POST", "/api/admin/announcements", mapOf("title" to "下一期投稿计划", "content" to "欢迎分享校园见闻", "kind" to "投稿计划", "publisher" to "伪造发布者"), token)
         assertEquals(200, response.statusCode())
         val id = data(response).path("id").asLong()
+        assertEquals("公告", repo.jdbc.queryForObject("SELECT kind FROM announcements WHERE id=?", String::class.java, id))
+        assertEquals("", repo.jdbc.queryForObject("SELECT period FROM announcements WHERE id=?", String::class.java, id))
+        val announcement = data(request("GET", "/api/announcements")).path("items").first()
+        assertFalse(announcement.has("kind")); assertFalse(announcement.has("period"))
         assertEquals("测试管理员", data(request("GET", "/api/announcements")).path("items").first().path("publisher").asText())
         assertEquals(200, request("PATCH", "/api/admin/announcements/$id", mapOf("published" to false), token).statusCode())
         assertEquals(0, data(request("GET", "/api/announcements")).path("items").size())
         assertEquals(1, data(request("GET", "/api/admin/announcements", token = token)).path("items").size())
+    }
+    @Test fun `公开投稿只接受指定班级并兼容旧中文班级写法`() {
+        val choices = data(request("GET", "/api/meta")).path("classes")
+        assertEquals(20, choices.size())
+        assertTrue(choices.any { it.asText() == "高一11班" }); assertTrue(choices.any { it.asText() == "高二9班" })
+        for (name in listOf("高一1班", "高一11班", "高二1班", "高二九班")) {
+            val result = request("POST", "/api/submissions", song + ("class_name" to name))
+            assertEquals(200, result.statusCode())
+        }
+        for (name in listOf("高一0班", "高一12班", "高二10班", "高三1班", "任意班级")) assertEquals(400, request("POST", "/api/submissions", song + ("class_name" to name)).statusCode())
+        assertEquals(4L, repo.count())
+        assertEquals("高二9班", repo.jdbc.queryForObject("SELECT class_name FROM submissions ORDER BY id DESC LIMIT 1", String::class.java))
+    }
+    @Test fun `评分接口和导出取消但历史评分不被清空且备注仍可保存`() {
+        val created = data(request("POST", "/api/submissions", song))
+        val code = created.path("code").asText()
+        val id = repo.byCode(code)!!.id
+        repo.jdbc.update("UPDATE submissions SET score=88 WHERE id=?", id)
+        val token = login()
+        assertFalse(data(request("GET", "/api/admin/submissions", token = token)).path("items").first().has("score"))
+        assertFalse(data(request("GET", "/api/submissions/track?code=$code&author=%E6%B5%8B%E8%AF%95%E5%90%8C%E5%AD%A6")).has("score"))
+        assertEquals(400, request("PATCH", "/api/admin/submissions/$id", mapOf("score" to 99, "note" to "不应写入"), token).statusCode())
+        assertEquals(88, repo.jdbc.queryForObject("SELECT score FROM submissions WHERE id=?", Int::class.java, id))
+        assertEquals(200, request("PATCH", "/api/admin/submissions/$id", mapOf("note" to "保留备注能力"), token).statusCode())
+        assertEquals("保留备注能力", repo.byId(id)!!.note)
+        val csv = request("GET", "/api/admin/export?format=csv", token = token).body().toString(Charsets.UTF_8)
+        assertFalse(csv.lineSequence().first().contains("评分"))
+        assertEquals("修改备注", data(request("GET", "/api/admin/audit?target_type=submission&target_id=$id", token = token)).path("items").first().path("action").asText())
     }
 }

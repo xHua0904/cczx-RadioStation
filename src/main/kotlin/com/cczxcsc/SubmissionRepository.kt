@@ -13,7 +13,7 @@ class SubmissionRepository(val jdbc: JdbcTemplate) {
         Submission(
             rs.getLong("id"), rs.getString("code"), rs.getString("author"), rs.getString("class_name"),
             rs.getString("contact"), rs.getString("category"), rs.getString("title"), rs.getString("content"),
-            rs.getString("status"), (rs.getObject("score") as? Number)?.toInt(), rs.getString("broadcast_date"), rs.getString("note"),
+            rs.getString("status"), rs.getString("broadcast_date"), rs.getString("note"),
             rs.getString("source"), rs.getString("created_at"), rs.getString("updated_at"),
             rs.getString("song_name"), rs.getString("artist"), rs.getString("song_url"), rs.getString("period"), rs.getString("broadcast_time"),
             rs.getString("reviewed_by"), rs.getString("scheduled_by"), rs.getString("updated_by")

@@ -28,7 +28,7 @@ class LegacyImportTest {
             "settings" to listOf(mapOf("key" to "admin_hash", "value" to hash)), "counters" to emptyList<Any>())
         val file = directory.resolve("legacy.json")
         Files.writeString(file, json.writeValueAsString(payload))
-        val auth = AuthService(jdbc, transactions, PasswordVault(directory.toString()))
+        val auth = AuthService(jdbc, transactions, PasswordVault(directory.toString()), AuditService(jdbc))
         auth.addAccount("迁移管理员"); auth.changePassword("cczx123456", "旧密码Test123", "迁移管理员")
         val importer = LegacyImportService(repo, json, auth, "sqlite")
         transactions.executeWithoutResult { importer.importFile(file) }

@@ -1,6 +1,25 @@
 server:
-  port: ${PORT:8000}
+  port: ${PORT:80}
   max-http-request-header-size: 16KB
+  tomcat:
+    basedir: ${LOG_DIR:./logs}/tomcat
+    accesslog:
+      enabled: true
+      directory: .
+      prefix: access
+      suffix: .log
+      max-days: 30
+      pattern: '%t %a "%m %U %H" %s %b %D'
+logging:
+  file:
+    name: ${LOG_DIR:./logs}/springboot.log
+  logback:
+    rollingpolicy:
+      file-name-pattern: ${LOG_DIR:./logs}/springboot.%d{yyyy-MM-dd}.%i.log.gz
+      max-file-size: 10MB
+      max-history: 30
+      total-size-cap: 1GB
+      clean-history-on-start: true
 spring:
   application:
     name: cczx-RadioStation

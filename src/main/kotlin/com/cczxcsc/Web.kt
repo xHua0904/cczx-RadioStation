@@ -23,6 +23,7 @@ import org.springframework.web.servlet.config.annotation.InterceptorRegistry
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException
 import org.springframework.web.ErrorResponse
+import org.springframework.web.util.DisconnectedClientHelper
 import java.io.BufferedReader
 import java.io.ByteArrayInputStream
 import java.io.InputStreamReader
@@ -89,7 +90,7 @@ class PageController {
 @RequestMapping("/api")
 class ApiController(private val service: SubmissionService, private val auth: AuthService, private val exports: ExportService,
     private val repo: SubmissionRepository, private val publications: PublicationService, private val server: ServerInfoService,
-    private val audit: AuditService) {
+    private val audit: AuditService, private val logs: ServerLogService) {
     private fun actor(request: HttpServletRequest) = request.getAttribute("operator") as String
     @GetMapping("/health") fun health(): Map<String, Any> {
         repo.jdbc.queryForObject("SELECT 1", Int::class.java)
@@ -112,6 +113,7 @@ class ApiController(private val service: SubmissionService, private val auth: Au
     @PostMapping("/admin/submissions/approve-all") fun approveAll(@RequestBody body: BatchInput, request: HttpServletRequest) = service.approveAll(body, actor(request))
     @GetMapping("/admin/schedule") fun schedule() = service.schedule()
     @GetMapping("/admin/server") fun server() = server.info()
+    @GetMapping("/admin/logs") fun logs(@RequestParam(defaultValue = "200") lines: Int) = logs.tail(lines)
     @GetMapping("/admin/announcements") fun messages() = publications.list(public = false)
     @PostMapping("/admin/announcements") fun publish(@RequestBody input: AnnouncementInput, request: HttpServletRequest) = publications.publish(input, actor(request))
     @PatchMapping("/admin/announcements/{id}") fun visibility(@PathVariable id: Long, @RequestBody body: Map<String, Boolean>, request: HttpServletRequest) =
@@ -120,8 +122,10 @@ class ApiController(private val service: SubmissionService, private val auth: Au
     @PatchMapping("/admin/submissions/{id}") fun update(@PathVariable id: Long, @RequestBody body: Map<String, Any?>, request: HttpServletRequest) = service.update(id, body, actor(request))
     @DeleteMapping("/admin/submissions/{id}") fun delete(@PathVariable id: Long, request: HttpServletRequest) = service.delete(id, actor(request))
     @GetMapping("/admin/stats") fun stats() = service.stats()
-    @GetMapping("/admin/export") fun export(@RequestParam params: Map<String, String>): ResponseEntity<ByteArray> {
-        val file = exports.export(service.exportItems(params), params["format"] ?: "csv")
+    @GetMapping("/admin/export") fun export(@RequestParam params: Map<String, String>, request: HttpServletRequest): ResponseEntity<ByteArray> {
+        val items = service.exportItems(params)
+        val file = exports.export(items, params["format"] ?: "csv")
+        audit.record(actor(request), "导出稿件", "export", file.filename, "${file.filename}；共 ${items.size} 篇")
         return ResponseEntity.ok().contentType(MediaType.parseMediaType(file.contentType))
             .header(HttpHeaders.CONTENT_DISPOSITION, org.springframework.http.ContentDisposition.attachment().filename(file.filename, Charsets.UTF_8).build().toString())
             .body(file.bytes)
@@ -131,12 +135,18 @@ class ApiController(private val service: SubmissionService, private val auth: Au
 @RestControllerAdvice
 class ApiErrors {
     private val log = LoggerFactory.getLogger(ApiErrors::class.java)
+    private val disconnected = DisconnectedClientHelper("com.cczxcsc.ClientDisconnect")
     @ExceptionHandler(ApiError::class)
     fun api(error: ApiError) = ResponseEntity.status(error.status).body(mapOf("error" to error.message))
     @ExceptionHandler(HttpMessageNotReadableException::class, MethodArgumentTypeMismatchException::class)
     fun malformed(error: Exception) = ResponseEntity.badRequest().body(mapOf("error" to "请求格式有误"))
     @ExceptionHandler(Exception::class)
-    fun unexpected(error: Exception): ResponseEntity<Map<String, String>> {
+    fun unexpected(error: Exception, response: HttpServletResponse): ResponseEntity<Map<String, String>>? {
+        // 客户端中断连接后不能再次写入 JSON，尤其是已开始发送的图片和导出文件。
+        if (disconnected.checkAndLogClientDisconnectedException(error)) return null
+        if (response.isCommitted) { log.error("响应发送后处理失败", error); return null }
+        response.resetBuffer()
+        response.contentType = MediaType.APPLICATION_JSON_VALUE
         if (error is ErrorResponse) return ResponseEntity.status(error.statusCode).body(mapOf("error" to when (error.statusCode.value()) {
             404 -> "接口或页面不存在"
             405 -> "不支持的请求方法"

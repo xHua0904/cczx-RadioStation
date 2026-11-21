@@ -16,7 +16,7 @@ let server;
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 function launch(args) {
-  const child = spawn('java', ['-jar', jar, ...config, ...args], { cwd: run, windowsHide: true, env: { ...process.env, DATA_DIR: storage } });
+  const child = spawn('java', ['-jar', jar, ...config, ...args], { cwd: run, windowsHide: true, env: { ...process.env, DATA_DIR: storage, LOG_DIR: path.join(run, 'logs') } });
   child.output = ''; child.stdout.on('data', chunk => { child.output += chunk; }); child.stderr.on('data', chunk => { child.output += chunk; });
   return child;
 }

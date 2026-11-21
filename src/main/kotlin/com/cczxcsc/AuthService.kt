@@ -8,7 +8,7 @@ import java.time.OffsetDateTime
 @Service
 class AuthService(
     private val jdbc: JdbcTemplate, private val transactions: TransactionTemplate,
-    private val vault: PasswordVault
+    private val vault: PasswordVault, private val audit: AuditService
 ) {
     companion object { const val ADMIN_ROLE = "admin" }
     private val attempts = mutableMapOf<String, MutableList<Long>>()
@@ -30,6 +30,7 @@ class AuthService(
             val inserted = jdbc.update("INSERT INTO accounts(username,password_hash,password_encrypted,initial_password,created_at) VALUES(?,?,?,1,?) ON CONFLICT(username) DO NOTHING",
                 user, Passwords.hash(Passwords.DEFAULT_ADMIN_PASSWORD), vault.encrypt(Passwords.DEFAULT_ADMIN_PASSWORD), nowIso())
             if (inserted != 1) throw ApiError(409, "账号已存在，已有密码保持不变")
+            audit.record(AuditService.commandActor, "添加账号", "account", user, user)
         }
         println("已添加账号：$user；默认密码：${Passwords.DEFAULT_ADMIN_PASSWORD}")
     }
@@ -42,6 +43,7 @@ class AuthService(
             if (account(user) == null) throw ApiError(404, "账号不存在")
             jdbc.update("DELETE FROM sessions WHERE username=?", user)
             jdbc.update("DELETE FROM accounts WHERE username=?", user)
+            audit.record(AuditService.commandActor, "删除账号", "account", user, user)
         }
         // 保留历史投稿、公告署名和操作记录，不将删除账号扩展为删除业务数据。
         println("已删除账号：$user，该账号的登录会话已注销。")
@@ -54,6 +56,7 @@ class AuthService(
                 Passwords.hash(Passwords.DEFAULT_ADMIN_PASSWORD), vault.encrypt(Passwords.DEFAULT_ADMIN_PASSWORD), user)
             if (updated != 1) throw ApiError(404, "账号不存在")
             jdbc.update("DELETE FROM sessions WHERE username=?", user)
+            audit.record(AuditService.commandActor, "重置密码", "account", user, user)
         }
         println("账号 $user 的密码已重置为 ${Passwords.DEFAULT_ADMIN_PASSWORD}，该账号的登录会话已注销。")
     }
@@ -62,10 +65,16 @@ class AuthService(
         val user = account(name(username)) ?: throw ApiError(404, "账号不存在")
         val hash = user["password_hash"].toString()
         val password = runCatching { vault.decrypt(user["password_encrypted"].toString()) }.getOrNull()
-        if (password != null && Passwords.verify(password, hash)) return password
+        if (password != null && Passwords.verify(password, hash)) {
+            audit.record(AuditService.commandActor, "查询密码", "account", username, username)
+            return password
+        }
         // 旧库仅有哈希时只能识别已知默认值，不覆盖用户已修改的密码。
         listOf(Passwords.DEFAULT_ADMIN_PASSWORD).forEach {
-            if (it.isNotEmpty() && Passwords.verify(it, hash)) return it
+            if (it.isNotEmpty() && Passwords.verify(it, hash)) {
+                audit.record(AuditService.commandActor, "查询密码", "account", username, username)
+                return it
+            }
         }
         throw IllegalStateException("当前密码无法查询：旧库仅有哈希，或密码查询密钥缺失。可使用 --reset-password --account=账号 恢复默认密码。")
     }
@@ -96,6 +105,7 @@ class AuthService(
             val inserted = jdbc.update("INSERT INTO sessions(token,created_at,expires_at,username) SELECT ?,?,?,username FROM accounts WHERE username=? AND password_hash=?",
                 Passwords.digest(token), created, expires, userName, user!!["password_hash"])
             if (inserted != 1) throw ApiError(401, "密码已更新，请重新登录")
+            audit.record(userName, "登录后台", "account", userName, userName)
         }
         // 所有可登录账号均为最高管理员，不依赖旧数据库中可能存在的 role 字段。
         return mapOf("ok" to true, "token" to token, "expires_at" to expires, "username" to userName, "role" to ADMIN_ROLE,
@@ -112,7 +122,13 @@ class AuthService(
     }
 
     fun username(header: String?): String = jdbc.queryForObject("SELECT username FROM sessions WHERE token=?", String::class.java, requireAdmin(header))!!
-    fun logout(header: String?) { jdbc.update("DELETE FROM sessions WHERE token=?", requireAdmin(header)) }
+    fun logout(header: String?) {
+        transactions.executeWithoutResult {
+            val user = username(header)
+            jdbc.update("DELETE FROM sessions WHERE token=?", requireAdmin(header))
+            audit.record(user, "退出后台", "account", user, user)
+        }
+    }
 
     fun changePassword(old: String, new: String, username: String) {
         val user = name(username)
@@ -124,6 +140,7 @@ class AuthService(
                 Passwords.hash(new), vault.encrypt(new), user, record["password_hash"])
             if (updated != 1) throw ApiError(409, "密码已被修改，请重新登录")
             jdbc.update("DELETE FROM sessions WHERE username=?", user)
+            audit.record(user, "修改密码", "account", user, user)
         }
     }
 }

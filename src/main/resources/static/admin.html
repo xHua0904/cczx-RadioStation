@@ -9,7 +9,7 @@
 <div class="login-wrap" id="loginView" hidden>
   <form class="login-card" id="loginForm" novalidate>
     <div class="brand"><img src="img/logo.png" alt="长春中学校徽"><span class="brand-text"><strong>新媒体中心</strong><em>广播站投稿管理</em></span></div>
-    <h1>登录管理后台</h1><p class="sub">管理稿件、播出日程与校园消息</p>
+    <h1>登录管理后台</h1><p class="sub">管理稿件、播出日程与校园公告</p>
     <div class="login-error" id="loginError" role="alert"></div>
     <div class="field"><label for="username">账号</label><input class="input" id="username" type="text" autocomplete="username" maxlength="40" placeholder="请输入账号" required></div>
     <div class="field"><label for="password">密码</label><input class="input" id="password" type="password" autocomplete="current-password" required></div>
@@ -26,7 +26,9 @@
       <button type="button" class="nav-item active" data-view="dashboard"><span class="nav-number">01</span><span>控制台</span></button>
       <button type="button" class="nav-item" data-view="review"><span class="nav-number">02</span><span>稿件审批</span><b id="pendingBadge">0</b></button>
       <button type="button" class="nav-item" data-view="approved"><span class="nav-number">03</span><span>已审批稿件</span></button>
-      <button type="button" class="nav-item" data-view="messages"><span class="nav-number">04</span><span>消息发布</span></button>
+      <button type="button" class="nav-item" data-view="messages"><span class="nav-number">04</span><span>公告发布</span></button>
+      <button type="button" class="nav-item" data-view="audit"><span class="nav-number">05</span><span>操作日志</span></button>
+      <button type="button" class="nav-item" data-view="developer"><span class="nav-number">06</span><span>开发者工具</span></button>
     </nav>
     <div class="sidebar-foot"><span class="online-dot" id="serverDot"></span><span id="serverLabel">服务器状态</span><small>长春中学 · 广播站</small></div>
   </aside>
@@ -46,7 +48,33 @@
           <article class="card dashboard-card"><div class="card-heading"><h2>班级投稿排行</h2><span>前 8 名</span></div><div id="classRank"></div></article>
           <article class="card dashboard-card"><div class="card-heading"><h2>近期播出日程</h2><button type="button" class="text-button" id="openBroadcastCalendar">查看日历 →</button></div><div id="upcomingSchedule"></div></article>
         </div>
-        <article class="card audit-card"><div class="card-heading"><h2>操作记录</h2><span>审稿、排期与消息操作</span></div><div id="auditHistory" aria-live="polite"></div><div class="audit-pagination"><button class="btn btn-ghost btn-sm" id="auditPrevious" type="button">上一页</button><span id="auditPageInfo"></span><button class="btn btn-ghost btn-sm" id="auditNext" type="button">下一页</button></div></article>
+      </section>
+
+      <section id="auditPanel" class="module-panel" hidden>
+        <div class="section-heading"><div><span class="eyebrow">操作留痕</span><h1>操作日志</h1><p>查看稿件从投稿到播出的操作账号、时间和历史，也可查阅公告及账号操作。</p></div><button class="btn btn-ghost" id="refreshAudit" type="button">刷新日志</button></div>
+        <article class="card audit-card">
+          <form id="auditFilters" class="audit-filters">
+            <div class="field"><label for="auditQuery">搜索操作人 / 编号</label><input class="input" id="auditQuery" type="search" maxlength="100" placeholder="账号、稿件编号或操作名称"></div>
+            <div class="field"><label for="auditType">操作对象</label><select class="select" id="auditType"><option value="submission">稿件</option><option value="">全部对象</option><option value="announcement">公告</option><option value="account">账号</option><option value="export">导出</option><option value="import">数据导入</option></select></div>
+            <div class="field"><label for="auditStart">开始日期</label><input class="input" id="auditStart" type="date"></div>
+            <div class="field"><label for="auditEnd">结束日期</label><input class="input" id="auditEnd" type="date"></div>
+            <div class="audit-filter-actions"><button class="btn btn-primary" type="submit">查询</button><button class="text-button" id="resetAudit" type="button">重置</button></div>
+          </form>
+          <div class="card-heading"><h2>操作记录</h2><span id="auditCount">正在加载…</span></div>
+          <div id="auditHistory" class="audit-timeline" aria-live="polite"></div>
+          <div class="audit-pagination"><button class="btn btn-ghost btn-sm" id="auditPrevious" type="button">上一页</button><span id="auditPageInfo"></span><button class="btn btn-ghost btn-sm" id="auditNext" type="button">下一页</button></div>
+        </article>
+      </section>
+
+      <section id="developerPanel" class="module-panel" hidden>
+        <div class="section-heading"><div><span class="eyebrow">运行诊断</span><h1>开发者工具</h1><p>查看服务器应用日志，定位启动与接口异常。</p></div><button class="btn btn-ghost" id="refreshLogs" type="button">刷新日志</button></div>
+        <article class="card developer-card">
+          <div class="card-heading"><div><h2>Spring Boot 日志</h2><p class="log-file" id="logFile">./logs/springboot.log</p></div><label class="log-line-limit" for="logLines">显示行数<select class="select" id="logLines"><option value="100">最近 100 行</option><option value="200" selected>最近 200 行</option><option value="500">最近 500 行</option></select></label></div>
+          <div class="log-toolbar"><span id="logUpdated">正在加载…</span><button class="text-button" id="copyLogs" type="button">复制日志</button></div>
+          <div class="log-legend" aria-label="日志级别颜色"><span class="log-trace">TRACE</span><span class="log-debug">DEBUG</span><span class="log-info">INFO</span><span class="log-warn">WARN</span><span class="log-error">ERROR</span><span class="log-fatal">FATAL</span></div>
+          <pre class="server-log" id="serverLogs" tabindex="0" aria-label="服务器应用日志" aria-live="polite">正在加载日志…</pre>
+          <p class="log-hint">应用日志按日期和大小自动归档；HTTP 访问日志位于 logs/tomcat。</p>
+        </article>
       </section>
 
       <section id="manuscriptPanel" class="module-panel" hidden>
@@ -65,15 +93,17 @@
           </article>
           <aside class="card operation-panel" aria-labelledby="operationHeading">
             <div class="card-heading"><h2 id="operationHeading">稿件操作</h2><span class="selected-chip" id="selectionCount">已选 0 篇</span></div>
+            <div class="operation-identity"><span>操作账号</span><strong id="operationAccount"></strong></div>
             <p id="selectionEmpty" class="empty-state">从左侧列表选择稿件后进行操作。</p>
             <div id="selectedDetails" class="selected-details" hidden></div>
+            <section id="submissionHistoryPanel" class="submission-history" hidden aria-labelledby="submissionHistoryHeading"><div class="card-heading"><h3 id="submissionHistoryHeading">这篇稿件的操作日志</h3><button class="text-button" id="refreshSubmissionHistory" type="button">刷新</button></div><div id="submissionHistory" aria-live="polite"></div><div class="history-pagination"><button class="text-button" id="historyPrevious" type="button">上一页</button><span id="historyPageInfo"></span><button class="text-button" id="historyNext" type="button">下一页</button></div></section>
             <div class="field"><label for="operationNote">审批 / 编辑备注</label><textarea class="textarea compact-textarea" id="operationNote" maxlength="300" placeholder="选填，记录审批意见"></textarea></div>
             <div id="reviewActions"><div class="operation-buttons"><button class="btn btn-primary" id="approveSelected" type="button" disabled>通过所选</button><button class="btn btn-ghost" id="rejectSelected" type="button" disabled>退回所选</button></div></div>
             <div id="approvedActions" hidden>
               <div class="row-2"><div class="field"><label for="scheduleDate">播出日期</label><input class="input" id="scheduleDate" type="date"></div><div class="field"><label for="scheduleTime">播出时间</label><input class="input" id="scheduleTime" type="time" value="12:00"></div></div>
               <button class="btn btn-primary btn-block" id="scheduleSelected" type="button" disabled>添加到日程</button>
               <div class="operation-buttons"><button class="btn btn-ghost btn-sm" id="markPlayed" type="button" disabled>标记已播出</button><button class="btn btn-ghost btn-sm" id="clearSchedule" type="button" disabled>移出日程</button></div>
-              <div class="row-2 single-edit"><div class="field"><label for="operationScore">评分（选填）</label><input class="input" id="operationScore" type="number" min="0" max="100" step="1"></div><button class="btn btn-ghost" id="saveSelected" type="button" disabled>保存评分 / 备注</button></div>
+              <button class="btn btn-ghost btn-block" id="saveSelected" type="button" disabled>保存备注</button>
               <button class="text-button" id="reopenSelected" type="button" disabled>重新提交审批</button>
             </div>
             <div class="operation-footer"><button class="text-button danger-text" id="deleteSelected" type="button" disabled>删除所选稿件</button><span>单篇删除</span></div>
@@ -96,32 +126,33 @@
       </section>
 
       <section id="messagesPanel" class="module-panel" hidden>
-        <div class="section-heading"><div><span class="eyebrow">校园消息</span><h1>消息发布</h1><p>发布公告或下一期投稿计划，展示在投稿页公告栏。</p></div></div>
+        <div class="section-heading"><div><span class="eyebrow">校园公告</span><h1>公告发布</h1><p>发布校园公告，展示在投稿页公告栏。</p></div></div>
         <div class="message-grid">
-          <article class="card message-composer"><h2>发布新消息</h2><form id="messageForm" novalidate>
-            <div class="field"><label for="messageKind">消息类型</label><select class="select" id="messageKind"><option>公告</option><option>投稿计划</option></select></div>
-            <div class="field"><label for="messageTitle">标题<span class="req">*</span></label><input class="input" id="messageTitle" maxlength="80" placeholder="输入公告或计划标题"></div>
-            <div class="field"><label for="messageContent">消息内容<span class="req">*</span></label><textarea class="textarea" id="messageContent" maxlength="2000" placeholder="写下需要向同学们发布的消息"></textarea></div>
+          <article class="card message-composer"><h2>发布新公告</h2><div class="operation-identity"><span>操作账号</span><strong class="operation-account"></strong></div><form id="messageForm" novalidate>
+            <div class="field"><label for="messageTitle">标题<span class="req">*</span></label><input class="input" id="messageTitle" maxlength="80" placeholder="输入公告标题"></div>
+            <div class="field"><label for="messageContent">公告内容<span class="req">*</span></label><textarea class="textarea" id="messageContent" maxlength="2000" placeholder="写下需要向同学们发布的消息"></textarea></div>
             <div class="field"><label for="messagePublishAs">发布身份</label><select class="select" id="messagePublishAs"><option value="current_account">以当前账号发布</option><option value="media_center">以新媒体中心发布</option></select></div>
-            <div class="publisher-line"><span>发布者</span><strong id="messagePublisher"></strong></div><button class="btn btn-primary btn-block" id="publishMessage" type="submit">发布消息</button>
+            <div class="publisher-line"><span>发布者</span><strong id="messagePublisher"></strong></div><button class="btn btn-primary btn-block" id="publishMessage" type="submit">发布公告</button>
           </form></article>
-          <article class="card message-history"><div class="card-heading"><h2>已发布消息</h2><span id="messageCount"></span></div><div id="messageHistory"><p class="empty-state">正在加载…</p></div></article>
+          <article class="card message-history"><div class="card-heading"><h2>公告历史</h2><span id="messageCount"></span></div><div id="messageHistory"><p class="empty-state">正在加载…</p></div></article>
         </div>
       </section>
     </main>
   </div>
 </div>
 
-<dialog class="workspace-dialog risk-dialog" id="confirmDialog"><form method="dialog"><span class="risk-label" id="confirmLabel">操作确认</span><h2 id="confirmTitle">确认操作</h2><p id="confirmMessage"></p><div class="dialog-actions"><button class="btn btn-ghost" value="cancel">取消</button><button class="btn btn-danger" id="confirmAccept" value="confirm">确认操作</button></div></form></dialog>
-<dialog class="workspace-dialog" id="newDialog"><form id="newForm" novalidate><div class="card-heading"><h2>手动登记稿件</h2><button class="icon-btn" type="button" data-close="newDialog" aria-label="关闭">×</button></div><div class="row-2"><div class="field"><label for="newAuthor">姓名</label><input class="input" id="newAuthor" maxlength="20"></div><div class="field"><label for="newClass">班级</label><input class="input" id="newClass" maxlength="30"></div></div><div class="field"><label for="newContent">投稿内容（1–100 字）</label><textarea class="textarea" id="newContent" maxlength="100"></textarea></div><div class="field"><label for="newContact">联系方式（选填）</label><input class="input" id="newContact" maxlength="50"></div><button class="btn btn-primary btn-block" id="createManuscript" type="submit">登记稿件</button></form></dialog>
-<dialog class="workspace-dialog" id="settingsDialog"><form id="passwordForm" novalidate><div class="card-heading"><h2>修改当前账号密码</h2><button class="icon-btn" type="button" data-close="settingsDialog" aria-label="关闭">×</button></div><div class="field"><label for="oldPassword">原密码</label><input class="input" id="oldPassword" type="password" autocomplete="current-password"></div><div class="field"><label for="newPassword">新密码（6–64 位）</label><input class="input" id="newPassword" type="password" autocomplete="new-password"></div><div class="field"><label for="confirmPassword">确认密码</label><input class="input" id="confirmPassword" type="password" autocomplete="new-password"></div><p class="settings-hint">修改后注销当前账号的全部登录会话，项目说明中的默认密码保持不变。</p><button class="btn btn-primary btn-block" id="changePassword" type="submit">保存密码</button></form></dialog>
+<dialog class="workspace-dialog risk-dialog" id="confirmDialog"><form method="dialog"><span class="risk-label" id="confirmLabel">操作确认</span><h2 id="confirmTitle">确认操作</h2><p id="confirmMessage"></p><p class="confirm-actor" id="confirmActor"></p><div class="dialog-actions"><button class="btn btn-ghost" value="cancel">取消</button><button class="btn btn-danger" id="confirmAccept" value="confirm">确认操作</button></div></form></dialog>
+<dialog class="workspace-dialog" id="newDialog"><form id="newForm" novalidate><div class="card-heading"><h2>手动登记稿件</h2><button class="icon-btn" type="button" data-close="newDialog" aria-label="关闭">×</button></div><div class="operation-identity"><span>登记账号</span><strong class="operation-account"></strong></div><div class="row-2"><div class="field"><label for="newAuthor">姓名</label><input class="input" id="newAuthor" maxlength="20"></div><div class="field"><label for="newClass">班级</label><input class="input" id="newClass" maxlength="30"></div></div><div class="field"><label for="newContent">投稿内容（1–100 字）</label><textarea class="textarea" id="newContent" maxlength="100"></textarea></div><div class="field"><label for="newContact">联系方式（选填）</label><input class="input" id="newContact" maxlength="50"></div><button class="btn btn-primary btn-block" id="createManuscript" type="submit">登记稿件</button></form></dialog>
+<dialog class="workspace-dialog" id="settingsDialog"><form id="passwordForm" novalidate><div class="card-heading"><h2>修改当前账号密码</h2><button class="icon-btn" type="button" data-close="settingsDialog" aria-label="关闭">×</button></div><div class="operation-identity"><span>操作账号</span><strong class="operation-account"></strong></div><div class="field"><label for="oldPassword">原密码</label><input class="input" id="oldPassword" type="password" autocomplete="current-password"></div><div class="field"><label for="newPassword">新密码（6–64 位）</label><input class="input" id="newPassword" type="password" autocomplete="new-password"></div><div class="field"><label for="confirmPassword">确认密码</label><input class="input" id="confirmPassword" type="password" autocomplete="new-password"></div><p class="settings-hint">修改后注销当前账号的全部登录会话，项目说明中的默认密码保持不变。</p><button class="btn btn-primary btn-block" id="changePassword" type="submit">保存密码</button></form></dialog>
 <footer class="site-credit" aria-label="网站署名">
   <strong>长春中学新媒体中心</strong>
   <p>by网络部x长春中学科创社</p>
+  <a class="credit-team-link" href="credits.html">制作人员名单 <span aria-hidden="true">↗</span></a>
   <a class="github-link" href="https://github.com/xHua0904/cczx-RadioStation" target="_blank" rel="noopener noreferrer" aria-label="在 GitHub 查看 cczx-RadioStation 源码">
     <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden="true"><path d="M12 .297C5.37.297 0 5.67 0 12.297c0 5.303 3.438 9.8 8.205 11.387.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.043-1.61-4.043-1.61-.546-1.387-1.333-1.756-1.333-1.756-1.09-.745.083-.73.083-.73 1.205.084 1.84 1.237 1.84 1.237 1.07 1.835 2.807 1.305 3.492.998.108-.776.418-1.305.762-1.605-2.665-.305-5.467-1.334-5.467-5.93 0-1.31.467-2.38 1.235-3.22-.123-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23a11.52 11.52 0 0 1 3.003-.404c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.652.242 2.873.12 3.176.77.84 1.233 1.91 1.233 3.22 0 4.61-2.807 5.624-5.48 5.92.43.371.823 1.102.823 2.222 0 1.606-.015 2.898-.015 3.293 0 .322.216.694.825.576C20.565 22.092 24 17.596 24 12.297c0-6.627-5.373-12-12-12"/></svg>
   </a>
 </footer>
 <div class="toasts" id="toasts" aria-live="polite"></div>
+<script src="js/log-levels.js"></script>
 <script src="js/admin-workspace.js"></script>
 </body></html>

@@ -8,6 +8,7 @@
 
 # 构建产物、缓存、IDE 配置与旧代码归档
 /target/
+/logs/
 /.tools/
 /.idea/
 /legacy/

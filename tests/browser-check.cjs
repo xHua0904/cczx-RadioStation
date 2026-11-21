@@ -95,7 +95,7 @@ async function screenshot(name) {
 async function main() {
   await mkdir(run, { recursive: true }); await mkdir(profile, { recursive: true });
   for (const username of ['新媒体中心', '网络部', '科创社']) {
-    const child = spawn('java', ['-jar', path.join(root, 'target', 'cczx-RadioStation.jar'), '--add-account=' + username, '--spring.main.banner-mode=off', '--logging.level.root=ERROR', '--spring.profiles.active=', '--spring.datasource.url=jdbc:sqlite:' + path.join(run, 'test.db'), '--app.data-dir=' + run], { cwd: root, windowsHide: true, env: { ...process.env, DATA_DIR: run } });
+    const child = spawn('java', ['-jar', path.join(root, 'target', 'cczx-RadioStation.jar'), '--add-account=' + username, '--spring.main.banner-mode=off', '--logging.level.root=ERROR', '--spring.profiles.active=', '--spring.datasource.url=jdbc:sqlite:' + path.join(run, 'test.db'), '--app.data-dir=' + run], { cwd: root, windowsHide: true, env: { ...process.env, DATA_DIR: run, LOG_DIR: path.join(run, 'logs') } });
     let output = ''; child.stdout.on('data', chunk => { output += chunk; }); child.stderr.on('data', chunk => { output += chunk; });
     const timer = setTimeout(() => child.kill(), 30000);
     try { assert.equal(await new Promise((resolve, reject) => { child.once('error', reject); child.once('exit', resolve); }), 0, output); }
@@ -103,7 +103,7 @@ async function main() {
   }
   const port = await freePort(); base = 'http://127.0.0.1:' + port;
   let javaLog = '', browserLog = '';
-  java = spawn('java', ['-jar', path.join(root, 'target', 'cczx-RadioStation.jar'), '--server.port=' + port, '--app.submissions-per-minute=1000', '--app.storage=sqlite', '--spring.profiles.active=', '--spring.flyway.enabled=false', '--spring.datasource.driver-class-name=org.sqlite.JDBC', '--spring.datasource.url=jdbc:sqlite:' + path.join(run, 'test.db'), '--app.data-dir=' + run, '--app.admin-password='], { cwd: root, windowsHide: true, env: { ...process.env, DATA_DIR: run } });
+  java = spawn('java', ['-jar', path.join(root, 'target', 'cczx-RadioStation.jar'), '--server.port=' + port, '--app.submissions-per-minute=1000', '--app.storage=sqlite', '--spring.profiles.active=', '--spring.flyway.enabled=false', '--spring.datasource.driver-class-name=org.sqlite.JDBC', '--spring.datasource.url=jdbc:sqlite:' + path.join(run, 'test.db'), '--app.data-dir=' + run, '--app.admin-password='], { cwd: root, windowsHide: true, env: { ...process.env, DATA_DIR: run, LOG_DIR: path.join(run, 'logs') } });
   java.stdout.on('data', data => { javaLog += data; }); java.stderr.on('data', data => { javaLog += data; });
   java.on('error', error => { javaLog += error.message; });
   try { await until(async () => (await fetch(base + '/api/health')).ok, '测试服务启动', 45000); }
@@ -121,7 +121,7 @@ async function main() {
   await navigate('/', 'document.querySelector("#submitBtn") && !document.querySelector("#submitBtn").disabled');
   assert.equal(await cdp.eval('document.querySelector("#period") === null'), true);
   assert.equal(await cdp.eval('document.querySelectorAll("#song_name,#artist,#song_url,#trackForm").length'), 0);
-  await fill('#author', '浏览器同学'); await fill('#class_name', '高一一班');
+  await fill('#author', '浏览器同学'); await fill('#class_name', '高一1班');
   for (const invalid of ['   ', '稿'.repeat(101)]) {
     await fill('#content', invalid); await click('#submitBtn');
     assert.ok(await cdp.eval('document.querySelector("[data-field=content]").classList.contains("invalid")'));
@@ -130,6 +130,9 @@ async function main() {
   await fill('#content', '校园里的每一天都值得记录。'); await click('#submitBtn');
   await waitPage('document.querySelector("#successPanel").classList.contains("show")');
   assert.equal((await api('/api/meta')).total, 1);
+  assert.equal(await cdp.eval('document.querySelector("#class_name").tagName'), 'SELECT');
+  assert.equal(await cdp.eval('document.querySelectorAll("#class_name optgroup[label=高一] option").length'), 11);
+  assert.equal(await cdp.eval('document.querySelectorAll("#class_name optgroup[label=高二] option").length'), 9);
   await noOverflow('桌面投稿页'); await screenshot('public-desktop');
   assert.equal(await cdp.eval('getComputedStyle(document.querySelector(".site-credit")).textAlign'), 'left');
   assert.equal(await cdp.eval('document.querySelector(".site-credit strong").textContent'), '长春中学新媒体中心');
@@ -146,14 +149,15 @@ async function main() {
   await fill('#username', '新媒体中心'); await fill('#password', testPassword); await click('#loginBtn');
   await waitPage('!document.querySelector("#dashView").hidden && document.querySelector("#serverStatusBadge").textContent === "运行中"');
   assert.ok(await cdp.eval('document.querySelector("#currentAccount").textContent.includes("新媒体中心")'));
-  assert.equal(await cdp.eval('document.querySelectorAll(".nav-item").length'), 4);
+  assert.equal(await cdp.eval('document.querySelectorAll(".nav-item").length'), 6);
   assert.equal(await cdp.eval('document.querySelectorAll("#filterPeriod,#newPeriod,#messagePeriod").length'), 0);
   const server = await api('/api/admin/server', 'GET', undefined, token);
   assert.ok(server.server_ips.length > 0);
   assert.ok(await cdp.eval('document.querySelector("#serverData").textContent.includes(' + JSON.stringify(server.server_ip) + ')'));
   assert.ok(await cdp.eval('document.querySelector(".workspace-top-actions a").textContent.includes("返回投稿页")'));
+  assert.equal(await cdp.eval('document.querySelectorAll("#operationScore,#messageKind").length'), 0);
   await noOverflow('桌面控制台'); await screenshot('dashboard-desktop');
-  console.log('PASS 控制台：四模块导航、服务器数据与 IP、返回投稿页');
+  console.log('PASS 控制台：六模块导航、服务器数据与 IP、返回投稿页');
 
   await click('.nav-item[data-view=review]');
   await waitPage('document.querySelectorAll("#manuscriptBody tr[data-id]").length === 3');
@@ -249,7 +253,8 @@ async function main() {
 
   await click('.nav-item[data-view=messages]');
   await waitPage('!document.querySelector("#messagesPanel").hidden && document.querySelector("#messageCount").textContent === "0 条"');
-  await fill('#messageKind', '投稿计划'); await fill('#messageTitle', '下一期投稿计划');
+  assert.equal(await cdp.eval('document.querySelector("#messageKind")'), null);
+  await fill('#messageTitle', '校园公告');
   await fill('#messageContent', '<img src=x onerror="window.injected=true">欢迎分享校园见闻'); await click('#publishMessage');
   await waitPage('document.querySelector("#messageCount").textContent === "1 条"');
   await screenshot('messages-desktop');
@@ -263,15 +268,16 @@ async function main() {
   await click('#messageHistory [data-message-id]');
   await waitPage('document.querySelector("#messageHistory").textContent.includes("已撤回")');
   await navigate('/', 'document.querySelector("#announcementCount") && document.querySelector("#announcementCount").textContent === "0 条"');
-  console.log('PASS 公告：计划发布、日期与发布者、HTML 作为文本、撤回');
+  console.log('PASS 公告：统一公告发布、日期与发布者、HTML 作为文本、撤回');
 
   await cdp.send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
   await noOverflow('手机投稿页'); await screenshot('public-mobile');
   await navigate('/admin.html', 'document.querySelector("#serverStatusBadge") && document.querySelector("#serverStatusBadge").textContent === "运行中"');
-  for (const view of ['dashboard', 'review', 'approved', 'messages']) {
+  for (const view of ['dashboard', 'review', 'approved', 'messages', 'audit', 'developer']) {
     await click('.nav-item[data-view=' + view + ']');
     await waitPage('document.querySelector(".nav-item[data-view=' + view + ']").classList.contains("active")');
     await noOverflow('手机 ' + view);
+    if (view === 'review' || view === 'approved') assert.ok(await cdp.eval('document.querySelector(".table-scroll").scrollWidth <= document.querySelector(".table-scroll").clientWidth + 1'));
   }
   await click('.nav-item[data-view=approved]'); await click('#approvedCalendarTab');
   await fill('#calendarMonth', '2026-12'); await click('[data-calendar-date="2026-12-01"]');
@@ -293,10 +299,42 @@ async function main() {
   console.log('PASS 管理员密码：默认 cczx123456 登录、后台改密与改回 cczx123456');
   await click('#btnLogout'); await fill('#username', '网络部'); await fill('#password', testPassword); await click('#loginBtn');
   await waitPage('document.querySelector("#currentAccount").textContent.includes("网络部") && !document.querySelector("#dashView").hidden');
-  assert.ok(await cdp.eval('document.querySelector("#auditHistory").textContent.includes("新媒体中心")'));
+  await click('.nav-item[data-view=audit]');
+  await waitPage('document.querySelector("#auditHistory").textContent.includes("新媒体中心")');
+  assert.ok(await cdp.eval('document.querySelector("#auditCount").textContent.includes("条记录")'));
+  await click('.nav-item[data-view=developer]');
+  await waitPage('document.querySelector("#serverLogs").textContent.includes("Started ApplicationKt")');
+  await cdp.eval(`window.originalLogFetch = window.fetch;
+    window.fetch = async (path, ...args) => typeof path === 'string' && path.startsWith('/api/admin/logs') ? { ok: true, json: async () => ({ file: './logs/springboot.log', updated_at: '2026-11-21T18:00:00+08:00', lines: [
+      '2026-11-21T18:00:00.000+08:00 TRACE 1 --- detail',
+      '2026-11-21T18:00:00.001+08:00 DEBUG 1 --- request',
+      '2026-11-21T18:00:00.002+08:00 INFO 1 --- <img src=x onerror="window.logInjected=true">',
+      '2026-11-21T18:00:00.003+08:00 WARN 1 --- slow request',
+      '2026-11-21T18:00:00.004+08:00 ERROR 1 --- server error',
+      'Caused by: java.io.IOException: test',
+      '2026-11-21T18:00:00.005+08:00 FATAL 1 --- unavailable'
+    ] }) } : window.originalLogFetch(path, ...args);
+    document.querySelector('#refreshLogs').click();`);
+  await waitPage('document.querySelectorAll("#serverLogs .log-error").length === 2');
+  assert.equal(await cdp.eval('document.querySelectorAll("#serverLogs img").length'), 0);
+  assert.equal(await cdp.eval('window.logInjected === true'), false);
+  assert.notEqual(await cdp.eval('getComputedStyle(document.querySelector("#serverLogs .log-error")).color'), await cdp.eval('getComputedStyle(document.querySelector("#serverLogs .log-info")).color'));
+  await screenshot('developer-mobile');
+  await cdp.eval('window.fetch = window.originalLogFetch; delete window.originalLogFetch;');
+  await noOverflow('开发者工具');
   await click('.nav-item[data-view=approved]'); await click('#approvedScheduledTab');
   await waitPage('document.querySelectorAll("#manuscriptBody tr[data-id]").length === 3');
   assert.ok(await cdp.eval('document.querySelector("#manuscriptBody").textContent.includes("审稿人：新媒体中心")'));
+  await click('[data-history="' + firstId + '"]');
+  await waitPage('document.querySelector("#submissionHistory").textContent.includes("审核通过") && document.querySelector("#submissionHistory").textContent.includes("在线投稿")');
+  assert.ok(await cdp.eval('document.querySelector("#operationAccount").textContent.includes("网络部")'));
+  await screenshot('submission-history-mobile');
+  await fill('#operationNote', '评分取消后仍可保存备注'); await click('#saveSelected');
+  await waitPage('document.querySelector("#toasts").textContent.includes("备注已保存")');
+  const editorToken = await cdp.eval('sessionStorage.getItem("gb_token")');
+  const updatedListing = await api('/api/admin/submissions', 'GET', undefined, editorToken);
+  assert.equal(updatedListing.items.find(item => item.id === firstId).note, '评分取消后仍可保存备注');
+  assert.ok(updatedListing.items.every(item => !Object.hasOwn(item, 'score')));
   const networkToken = (await api('/api/admin/login', 'POST', { username: '网络部', password: testPassword })).token;
   await api('/api/admin/submissions/' + firstId, 'PATCH', { broadcast_date: '2026-12-01', broadcast_time: '12:45' }, networkToken);
   await click('#approvedCalendarTab'); await fill('#calendarMonth', '2026-12'); await click('[data-calendar-date="2026-12-01"]');
@@ -323,7 +361,14 @@ async function main() {
   console.log('PASS 多账号：当前账号、审稿人与排期人、公告实际发布者、操作历史、署名及 GitHub 图标');
   await screenshot('messages-mobile');
   assert.deepEqual(browserErrors, []);
-  console.log('PASS 手机布局：投稿页、四个后台模块及日历无页面横向溢出');
+  assert.equal(await cdp.eval('document.querySelector(".credit-team-link").getAttribute("href")'), 'credits.html');
+  await click('.credit-team-link');
+  await waitPage('document.title.includes("制作人员名单") && document.querySelectorAll(".credits-card").length === 4');
+  for (const name of ['辛一航', 'DeepSeek-V4.1-Flash 1017', 'ChatGPT-6.1-Sol', '路欣铭', '高二优研一班', '张浩宇', '韩心怡老师']) assert.ok(await cdp.eval('document.body.textContent.includes(' + JSON.stringify(name) + ')'));
+  assert.equal(await cdp.eval('document.body.textContent.includes("名单整理中")'), false);
+  await noOverflow('手机制作名单'); await screenshot('credits-mobile');
+  console.log('PASS 班级下拉、评分取消与备注、日志级别高亮、稿件历史和制作名单入口');
+  console.log('PASS 手机布局：投稿页、六个后台模块及日历无页面横向溢出');
 }
 
 main().catch(error => { console.error(error); process.exitCode = 1; }).finally(async () => {

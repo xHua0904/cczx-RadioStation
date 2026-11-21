@@ -24,10 +24,15 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:?请先在 .env 设置 DB_PASSWORD}
       SUBMISSIONS_PER_MINUTE: ${SUBMISSIONS_PER_MINUTE:-20}
       TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS:-}
+      PORT: ${PORT:-80}
+      LOG_DIR: /app/logs
+    sysctls:
+      net.ipv4.ip_unprivileged_port_start: "0"
     ports:
-      - "8000:8000"
+      - "${PORT:-80}:${PORT:-80}"
     volumes:
       - app-data:/app/data
+      - ./logs:/app/logs
     depends_on:
       postgres:
         condition: service_healthy

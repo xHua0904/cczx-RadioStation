@@ -6,15 +6,15 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.sql.ResultSet
 
-data class AnnouncementInput(val title: String = "", val content: String = "", val kind: String = "公告", val period: String = "", val publishAs: String = "current_account")
-data class Announcement(val id: Long, val title: String, val content: String, val kind: String, val period: String,
+data class AnnouncementInput(val title: String = "", val content: String = "", val publishAs: String = "current_account")
+data class Announcement(val id: Long, val title: String, val content: String,
     val publisher: String, val published: Boolean, val createdAt: String, val publishedAt: String,
     val updatedBy: String = "", val updatedAt: String = "")
 
 @Service
 class PublicationService(private val jdbc: JdbcTemplate, private val audit: AuditService) {
     private val mapper = RowMapper { row: ResultSet, _: Int ->
-        Announcement(row.getLong("id"), row.getString("title"), row.getString("content"), row.getString("kind"), row.getString("period"),
+        Announcement(row.getLong("id"), row.getString("title"), row.getString("content"),
             row.getString("publisher"), row.getInt("published") == 1, row.getString("created_at"), row.getString("published_at"), row.getString("updated_by"), row.getString("updated_at"))
     }
     fun list(public: Boolean = true): Map<String, Any> = mapOf("items" to jdbc.query(
@@ -22,20 +22,17 @@ class PublicationService(private val jdbc: JdbcTemplate, private val audit: Audi
 
     @Transactional
     fun publish(input: AnnouncementInput, actor: String): Map<String, Any> {
-        val title = Validation.text(input.title, "消息标题", min = 1, max = 80)
-        val content = Validation.text(input.content, "消息内容", min = 1, max = 2000)
-        if (input.kind !in setOf("公告", "投稿计划")) throw ApiError(400, "消息类型不正确")
+        val title = Validation.text(input.title, "公告标题", min = 1, max = 80)
+        val content = Validation.text(input.content, "公告内容", min = 1, max = 2000)
         val publisher = when (input.publishAs) {
             "current_account" -> actor
             "media_center" -> "新媒体中心"
             else -> throw ApiError(400, "发布身份不正确")
         }
-        val period = input.period.trim()
-        if (period.isNotEmpty()) Weeks.parse(period)
         val time = nowIso()
         val id = jdbc.queryForObject("INSERT INTO announcements(title,content,kind,period,publisher,published,created_at,published_at,updated_by,updated_at) VALUES(?,?,?,?,?,1,?,?,?,?) RETURNING id",
-            Long::class.java, title, content, input.kind, period, publisher, time, time, actor, time)!!
-        audit.record(actor, "发布${input.kind}", "announcement", id, "$title；发布者：$publisher")
+            Long::class.java, title, content, "公告", "", publisher, time, time, actor, time)!!
+        audit.record(actor, "发布公告", "announcement", id, "$title；发布者：$publisher")
         return mapOf("ok" to true, "id" to id)
     }
 

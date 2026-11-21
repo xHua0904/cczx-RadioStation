@@ -6,6 +6,7 @@ if (-not $SkipCompile) {
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
 $taskRoot = (Get-Location).Path
+$env:LOG_DIR = Join-Path $taskRoot 'target/test-runtime/backend-logs'
 New-Item -ItemType Directory -Path 'target/test-runner' -Force | Out-Null
 New-Item -ItemType Directory -Path 'target/test-runner/lib' -Force | Out-Null
 Add-Type -AssemblyName System.IO.Compression.FileSystem

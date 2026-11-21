@@ -14,7 +14,7 @@ import java.nio.file.Path
 class Application {
     @Bean
     @Order(1)
-    fun startup(auth: AuthService, imports: LegacyImportService, demo: DemoService) = ApplicationRunner { args: ApplicationArguments ->
+    fun startup(auth: AuthService, imports: LegacyImportService, demo: DemoService, audit: AuditService) = ApplicationRunner { args: ApplicationArguments ->
         require(listOf("import-legacy", "reset-password", "show-password", "demo-data", "add-account", "delete-account", "list-accounts").count(args::containsOption) <= 1) { "一次只能指定一个管理命令" }
         require(!args.containsOption("account") || args.containsOption("show-password") || args.containsOption("reset-password")) { "--account 仅用于查询或重置密码" }
         fun value(option: String): String = args.getOptionValues(option)?.singleOrNull()?.takeIf { it.isNotBlank() }
@@ -22,12 +22,18 @@ class Application {
         val username = if (args.containsOption("account")) value("account") else ""
         require(!(args.containsOption("show-password") || args.containsOption("reset-password")) || username.isNotEmpty()) { "没有默认账号，请使用 --account=账号 指定目标账号" }
         when {
-            args.containsOption("import-legacy") -> imports.importFile(Path.of(args.getOptionValues("import-legacy").first()))
+            args.containsOption("import-legacy") -> {
+                imports.importFile(Path.of(args.getOptionValues("import-legacy").first()))
+                audit.record(AuditService.commandActor, "导入旧稿件", "import", "legacy", "旧投稿数据导入")
+            }
             args.containsOption("reset-password") -> auth.resetPassword(username)
             args.containsOption("show-password") -> println("账号 $username 的密码：${auth.currentPassword(username)}")
             args.containsOption("add-account") -> auth.addAccount(value("add-account"))
             args.containsOption("delete-account") -> auth.deleteAccount(value("delete-account"))
-            args.containsOption("list-accounts") -> auth.listAccounts().let { names -> if (names.isEmpty()) println("暂无账号，请使用 --add-account=账号 添加。") else names.forEach { println("$it\t${AuthService.ADMIN_ROLE}") } }
+            args.containsOption("list-accounts") -> auth.listAccounts().let { names ->
+                if (names.isEmpty()) println("暂无账号，请使用 --add-account=账号 添加。") else names.forEach { println("$it\t${AuthService.ADMIN_ROLE}") }
+                audit.record(AuditService.commandActor, "查询账号列表", "account", "all", "共 ${names.size} 个账号")
+            }
             args.containsOption("demo-data") -> demo.generate()
         }
     }

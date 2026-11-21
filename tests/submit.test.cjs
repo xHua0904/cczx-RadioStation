@@ -46,7 +46,7 @@ async function page(messages = []) {
   await new Promise(resolve => setImmediate(resolve));
   return { elements, fields, form, requests, responses };
 }
-const fill = p => { p.form.elements.author.value = "测试同学"; p.form.elements.class_name.value = "高一一班"; };
+const fill = p => { p.form.elements.author.value = "测试同学"; p.form.elements.class_name.value = "高一1班"; };
 
 test("无需选择期次即可提交一百字稿件，显示编号并可继续投稿", async () => {
   const p = await page(); fill(p); p.form.elements.content.value = "稿".repeat(100);
@@ -72,6 +72,18 @@ test("公告按块展示日期和实际发布者，内容作为文本呈现", as
   assert.equal(card.className, "announcement-card");
   assert.equal(card.children.find(x => x.className === "announcement-meta").textContent, "2026-11-15 · 发布者：网络部");
   assert.equal(card.children.find(x => x.className === "announcement-content").textContent, "<script>alert(1)</script>");
+  assert.equal(card.children.some(x => x.className === "message-kind"), false);
+});
+test("班级下拉框包含高一十一班和高二九班且不提供自由输入", () => {
+  const select = html.match(/<select[^>]*id="class_name"[\s\S]*?<\/select>/)[0];
+  assert.equal((select.match(/<option value="高一\d+班"/g) || []).length, 11);
+  assert.equal((select.match(/<option value="高二\d+班"/g) || []).length, 9);
+  assert.ok(select.includes('value="高一11班"')); assert.ok(select.includes('value="高二9班"'));
+});
+test("没有选择班级或超出班级范围时不会提交", async () => {
+  const p = await page(); p.form.elements.author.value = "测试同学"; p.form.elements.content.value = "校园投稿";
+  for (const value of ["", "高一12班", "高二10班", "高三1班"]) { p.form.elements.class_name.value = value; await p.form.fire("submit"); }
+  assert.equal(p.requests.filter(r => r.url === "/api/submissions").length, 0);
 });
 
 test("投稿失败后保留表单并恢复提交按钮", async () => {

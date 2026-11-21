@@ -16,7 +16,7 @@ class ProjectDocumentTest {
         val source = SQLiteDataSource().apply { url = "jdbc:sqlite:${root.resolve("test.db")}" }
         val jdbc = JdbcTemplate(source); val tx = TransactionTemplate(DataSourceTransactionManager(source))
         DatabaseInitializer(jdbc, tx, root.toString()).afterPropertiesSet()
-        return Triple(root, jdbc, AuthService(jdbc, tx, PasswordVault(root.toString())))
+        return Triple(root, jdbc, AuthService(jdbc, tx, PasswordVault(root.toString()), AuditService(jdbc)))
     }
     @Test fun `新数据库没有默认账户也不会从旧共用密码自动创建账户`() {
         val (_, jdbc, auth) = fixture()

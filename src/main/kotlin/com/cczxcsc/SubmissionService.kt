@@ -12,17 +12,17 @@ class SubmissionService(private val repo: SubmissionRepository, private val audi
     @Transactional
     fun create(input: SubmissionInput, admin: Boolean = false, actor: String = "系统"): Map<String, Any> {
         val result = repo.insert(Validation.submission(input, admin), if (admin) "手动登记" else "在线投稿")
+        val row = repo.byCode(result["code"].toString())!!
         if (admin) {
-            val row = repo.byCode(result["code"].toString())!!
             repo.update(row.id, mapOf("updated_by" to actor, "reviewed_by" to if (row.status == "待审核") "" else actor))
             audit.record(actor, "手动登记", "submission", row.id, row.code)
-        }
+        } else audit.record("投稿人：${row.author}", "在线投稿", "submission", row.id, row.code)
         return result
     }
 
     fun meta(): Map<String, Any> {
         val start = LocalDate.now(schoolZone).with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)).toString()
-        return mapOf("categories" to categories, "statuses" to statuses, "periods" to Weeks.available(), "total" to repo.count(), "this_week" to repo.count(repo.filters(mapOf("start" to start))))
+        return mapOf("categories" to categories, "statuses" to statuses, "classes" to schoolClasses, "periods" to Weeks.available(), "total" to repo.count(), "this_week" to repo.count(repo.filters(mapOf("start" to start))))
     }
 
     fun track(code: String, author: String): Map<String, Any?> {
@@ -32,7 +32,7 @@ class SubmissionService(private val repo: SubmissionRepository, private val audi
         if (row.author != author.trim()) throw ApiError(404, "编号与姓名不匹配，请核对后再试")
         // 保留旧查询 API 兼容性，不返回联系方式或正文。
         return mapOf("code" to row.code, "author" to row.author, "title" to row.title, "category" to row.category,
-            "status" to row.status, "note" to row.note, "score" to row.score, "broadcast_date" to row.broadcastDate,
+            "status" to row.status, "note" to row.note, "broadcast_date" to row.broadcastDate,
             "created_at" to row.createdAt, "updated_at" to row.updatedAt,
             "period" to row.period, "broadcast_time" to row.broadcastTime)
     }
@@ -47,17 +47,12 @@ class SubmissionService(private val repo: SubmissionRepository, private val audi
 
     @Transactional
     fun update(id: Long, body: Map<String, Any?>, actor: String = "系统"): Map<String, Boolean> {
+        if (body.containsKey("score")) throw ApiError(400, "评分功能已取消，请使用备注")
         val fields = linkedMapOf<String, Any?>()
         if (body.containsKey("status")) {
             val status = body["status"]?.toString().orEmpty()
             if (status !in statuses) throw ApiError(400, "状态不合法")
             fields["status"] = status
-        }
-        if (body.containsKey("score")) {
-            val raw = body["score"]
-            val score = if (raw == null || raw == "") null else raw.toString().toIntOrNull() ?: throw ApiError(400, "评分需为整数")
-            if (score != null && score !in 0..100) throw ApiError(400, "评分需在 0–100 之间")
-            fields["score"] = score
         }
         if (body.containsKey("broadcast_date")) fields["broadcast_date"] = Validation.date(body["broadcast_date"]?.toString().orEmpty().trim())
         if (body.containsKey("broadcast_time")) {
@@ -82,7 +77,7 @@ class SubmissionService(private val repo: SubmissionRepository, private val audi
         if (!repo.update(id, fields)) throw ApiError(404, "投稿不存在")
         if (reviewChanged) audit.record(actor, when (status) { "已通过" -> "审核通过"; "已退稿" -> "退稿"; else -> "重新提交审批" }, "submission", id, existing.code)
         if (scheduleChanged) audit.record(actor, if (fields["broadcast_date"] == "") "移出日程" else "安排播出日程", "submission", id, existing.code)
-        if (!reviewChanged && !scheduleChanged) audit.record(actor, if (status != existing.status) "切换播出状态：$status" else "修改评分或备注", "submission", id, existing.code)
+        if (!reviewChanged && !scheduleChanged) audit.record(actor, if (status != existing.status) "切换播出状态：$status" else "修改备注", "submission", id, existing.code)
         return mapOf("ok" to true)
     }
 

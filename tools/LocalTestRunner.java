@@ -13,7 +13,7 @@ import org.springframework.test.context.TestContextManager;
 // Maven 测试执行器无法下载时，在已有依赖上运行现有断言和 Spring 测试上下文。
 public final class LocalTestRunner {
     public static void main(String[] args) throws Exception {
-        String[] classes = {"com.cczxcsc.CoreTest", "com.cczxcsc.SqliteMigrationTest", "com.cczxcsc.LegacyImportTest", "com.cczxcsc.ProjectDocumentTest", "com.cczxcsc.SubmissionPolicyTest", "com.cczxcsc.ApiSqliteTest", "com.cczxcsc.ApiPolicyTest"};
+        String[] classes = {"com.cczxcsc.CoreTest", "com.cczxcsc.SqliteMigrationTest", "com.cczxcsc.LegacyImportTest", "com.cczxcsc.ProjectDocumentTest", "com.cczxcsc.SubmissionPolicyTest", "com.cczxcsc.ApiErrorsTest", "com.cczxcsc.ServerLogServiceTest", "com.cczxcsc.ApiSqliteTest", "com.cczxcsc.ApiPolicyTest"};
         int passed = 0;
         int failed = 0;
         for (String name : classes) {

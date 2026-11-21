@@ -26,7 +26,7 @@
   }
   const rules = {
     author: v => v.length >= 2 ? "" : "请填写姓名（至少 2 个字）",
-    class_name: v => v.length >= 2 ? "" : "请填写班级",
+    class_name: v => /^高(?:一(?:[1-9]|1[01])|二[1-9])班$/.test(v) ? "" : "请选择班级（高一 1–11 班、高二 1–9 班）",
     content: v => !v ? "投稿内容不能为空" : v.length > 100 ? "投稿内容不得超过 100 字" : "",
     contact: () => ""
   };
@@ -48,11 +48,10 @@
       }
       items.forEach(item => {
         const card = document.createElement("article"); card.className = "announcement-card";
-        const tag = document.createElement("span"); tag.className = "message-kind"; tag.textContent = item.kind;
         const title = document.createElement("h3"); title.textContent = item.title;
         const meta = document.createElement("p"); meta.className = "announcement-meta"; meta.textContent = (item.published_at || item.created_at).slice(0, 10) + " · 发布者：" + (item.publisher || "新媒体中心");
         const text = document.createElement("p"); text.className = "announcement-content"; text.textContent = item.content;
-        card.append(tag, title, meta, text);
+        card.append(title, meta, text);
         feed.appendChild(card);
       });
     } catch (error) { feed.replaceChildren(); const tip = document.createElement("p"); tip.className = "empty-state"; tip.textContent = "公告加载失败，请稍后重试。"; feed.appendChild(tip); $("#announcementRetry").hidden = false; }
@@ -75,6 +74,6 @@
     Object.keys(rules).forEach(name => markField(name, "")); alert.classList.remove("show"); $("#successPanel").classList.remove("show"); form.hidden = false;
   });
   $("#announcementRetry").addEventListener("click", loadAnnouncements);
-  if (location.protocol === "file:") { showError("请按照 README.md 启动项目，并通过 http://127.0.0.1:8000/ 打开投稿页面。"); return; }
+  if (location.protocol === "file:") { showError("请按照 README.md 启动项目，并通过 http://127.0.0.1/ 打开投稿页面。"); return; }
   submit.disabled = false; loadAnnouncements();
 })();

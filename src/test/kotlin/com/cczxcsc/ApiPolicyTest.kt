@@ -64,7 +64,7 @@ class ApiPolicyTest {
         repo.jdbc.update("UPDATE accounts SET role='editor'")
         val tokens = listOf(login("网络部"), login("科创社"))
         for (token in tokens) {
-            for (path in listOf("/api/admin/server", "/api/admin/audit", "/api/admin/export?format=csv", "/api/admin/export?format=xlsx")) assertEquals(200, request("GET", path, token = token).statusCode())
+            for (path in listOf("/api/admin/server", "/api/admin/audit", "/api/admin/logs?lines=100", "/api/admin/export?format=csv", "/api/admin/export?format=xlsx")) assertEquals(200, request("GET", path, token = token).statusCode())
             assertEquals("admin", json.readTree(request("GET", "/api/admin/me", token = token).body()).path("role").asText())
         }
         val item = request("POST", "/api/admin/submissions", song, tokens[0]); assertEquals(200, item.statusCode())
@@ -92,5 +92,24 @@ class ApiPolicyTest {
         assertEquals(401, request("GET", "/api/admin/me", token = first).statusCode())
         assertEquals(200, request("GET", "/api/admin/me", token = second).statusCode())
         assertEquals("网络部", json.readTree(request("GET", "/api/announcements").body()).path("items").first().path("publisher").asText())
+    }
+    @Test fun `账号导出及日期筛选日志不泄露凭据且开发者日志需要登录`() {
+        val token = login("网络部")
+        assertEquals(401, request("GET", "/api/admin/logs").statusCode())
+        assertEquals(400, request("GET", "/api/admin/logs?lines=999", token = token).statusCode())
+        assertEquals(200, request("GET", "/api/admin/logs?lines=100", token = token).statusCode())
+        assertEquals(200, request("GET", "/api/admin/export?format=csv", token = token).statusCode())
+        val exports = json.readTree(request("GET", "/api/admin/audit?target_type=export&username=%E7%BD%91%E7%BB%9C%E9%83%A8", token = token).body())
+        assertEquals(1, exports.path("total").asInt())
+        assertEquals("网络部", exports.path("items").first().path("username").asText())
+        val today = java.time.LocalDate.now(schoolZone).toString()
+        val accountLogs = request("GET", "/api/admin/audit?target_type=account&start_date=$today&end_date=$today", token = token)
+        assertEquals(200, accountLogs.statusCode())
+        assertTrue(json.readTree(accountLogs.body()).path("items").any { it.path("action").asText() == "登录后台" })
+        assertFalse(accountLogs.body().contains(token)); assertFalse(accountLogs.body().contains(Passwords.DEFAULT_ADMIN_PASSWORD))
+        assertEquals(400, request("GET", "/api/admin/audit?start_date=2026-12-31&end_date=2026-01-01", token = token).statusCode())
+        assertEquals(400, request("GET", "/api/admin/audit?start_date=bad-date", token = token).statusCode())
+        assertEquals(200, request("POST", "/api/admin/logout", emptyMap<String, String>(), token).statusCode())
+        assertEquals(1, repo.jdbc.queryForObject("SELECT COUNT(*) FROM audit_log WHERE username=? AND action='退出后台'", Int::class.java, "网络部"))
     }
 }

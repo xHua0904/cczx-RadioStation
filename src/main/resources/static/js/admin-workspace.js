@@ -1,11 +1,11 @@
-/* 新媒体中心：控制台、审批、已审批稿件、消息发布 */
+/* 新媒体中心：稿件流程、操作历史与服务器诊断 */
 (() => {
   "use strict";
   const $ = (s, root = document) => root.querySelector(s);
   const $$ = (s, root = document) => [...root.querySelectorAll(s)];
   const todayKey = () => new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Shanghai" }).format(new Date());
   const state = { token: sessionStorage.getItem("gb_token") || "", view: "dashboard", items: [], selected: new Set(), page: 1, pages: 1, total: 0, pending: 0, busy: false, requestId: 0, approvedView: "list", schedule: [], calendarDate: todayKey(), calendarMonth: todayKey().slice(0, 7) };
-  const names = { dashboard: "控制台", review: "稿件审批", approved: "已审批稿件", messages: "消息发布" };
+  const names = { dashboard: "控制台", review: "稿件审批", approved: "已审批稿件", messages: "公告发布", audit: "操作日志", developer: "开发者工具" };
   const esc = value => String(value ?? "").replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
   const statusClass = status => ({ "待审核": "st-pending", "已通过": "st-passed", "已播出": "st-aired", "已退稿": "st-rejected" }[status] || "st-pending");
   function toast(message, error = false) {
@@ -14,6 +14,8 @@
   function showError(message) { $("#workspaceError").textContent = message; $("#workspaceError").hidden = !message; }
   function setAccount(username) {
     state.username = username; $("#currentAccount").textContent = "当前账号：" + username;
+    $$(".operation-account").forEach(node => { node.textContent = username; });
+    $("#operationAccount").textContent = username;
     $("#username").value = username; updatePublisher();
   }
   function updatePublisher() { $("#messagePublisher").textContent = $("#messagePublishAs").value === "media_center" ? "新媒体中心" : state.username; }
@@ -21,12 +23,50 @@
     return [["审稿人", row.reviewed_by], ["排期人", row.scheduled_by], ["最近操作人", row.updated_by]]
       .filter(([, name]) => name).map(([label, name]) => esc(label) + "：" + esc(name)).join("<br>");
   }
+  const formatTime = value => value && Number.isFinite(Date.parse(value)) ? new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" }).format(new Date(value)) : value || "—";
+  function auditMarkup(items) {
+    return items.length ? items.map(item => `<article class="audit-entry"><div class="audit-entry-heading"><strong>${esc(item.username)}</strong><time>${esc(formatTime(item.created_at))}</time></div><p>${esc(item.action)}</p><span>${esc(item.target_label)}</span></article>`).join("") : '<p class="empty-state">暂无符合条件的操作记录</p>';
+  }
   async function loadAudit() {
-    const data = await api("/api/admin/audit?page=" + (state.auditPage || 1));
+    const requestId = state.auditRequestId = (state.auditRequestId || 0) + 1;
+    const params = new URLSearchParams({ page: String(state.auditPage || 1), target_type: $("#auditType").value, q: $("#auditQuery").value.trim(), start_date: $("#auditStart").value, end_date: $("#auditEnd").value });
+    const data = await api("/api/admin/audit?" + params);
+    if (requestId !== state.auditRequestId) return;
+    if (data.page > data.pages) { state.auditPage = data.pages; return loadAudit(); }
     state.auditPage = data.page; state.auditPages = data.pages;
-    $("#auditHistory").innerHTML = data.items.length ? data.items.map(item => `<article class="audit-entry"><p><strong>${esc(item.username)}</strong> · ${esc(item.action)}</p><span>${esc(item.target_label)} · ${esc(item.created_at.replace("T", " "))}</span></article>`).join("") : '<p class="empty-state">暂无操作记录</p>';
+    $("#auditHistory").innerHTML = auditMarkup(data.items);
+    $("#auditCount").textContent = "共 " + data.total + " 条记录";
     $("#auditPageInfo").textContent = "第 " + data.page + " / " + data.pages + " 页";
     $("#auditPrevious").disabled = data.page <= 1; $("#auditNext").disabled = data.page >= data.pages;
+  }
+  async function loadSubmissionHistory() {
+    const id = state.historyId;
+    if (!id) return;
+    const requestId = state.historyRequestId = (state.historyRequestId || 0) + 1;
+    try {
+      const data = await api("/api/admin/audit?target_type=submission&target_id=" + id + "&page=" + (state.historyPage || 1));
+      if (id !== state.historyId || requestId !== state.historyRequestId) return;
+      if (data.page > data.pages) { state.historyPage = data.pages; return loadSubmissionHistory(); }
+      state.historyPage = data.page; state.historyPages = data.pages;
+      $("#submissionHistory").innerHTML = auditMarkup(data.items);
+      $("#historyPageInfo").textContent = data.page + " / " + data.pages;
+      $("#historyPrevious").disabled = data.page <= 1; $("#historyNext").disabled = data.page >= data.pages;
+    } catch (error) { if (id === state.historyId && requestId === state.historyRequestId) $("#submissionHistory").textContent = error.message; }
+  }
+  async function loadLogs() {
+    const requestId = state.logRequestId = (state.logRequestId || 0) + 1;
+    const data = await api("/api/admin/logs?lines=" + $("#logLines").value);
+    if (requestId !== state.logRequestId) return;
+    $("#logFile").textContent = data.file;
+    const fragment = document.createDocumentFragment();
+    window.RadioLogLevels(data.lines).forEach(({ text, level }, index) => {
+      const line = document.createElement("span"); line.className = "log-line log-" + level;
+      line.textContent = text + (index < data.lines.length - 1 ? "\n" : ""); fragment.appendChild(line);
+    });
+    $("#serverLogs").replaceChildren(fragment);
+    if (!data.lines.length) $("#serverLogs").textContent = "暂时没有应用日志。";
+    $("#logUpdated").textContent = "共 " + data.lines.length + " 行 · 更新于 " + formatTime(data.updated_at);
+    $("#serverLogs").scrollTop = $("#serverLogs").scrollHeight;
   }
   function loginView(message = "") {
     state.token = ""; state.username = ""; sessionStorage.removeItem("gb_token"); $("#currentAccount").textContent = ""; $("#messagePublisher").textContent = ""; $("#dashView").hidden = true; $("#loginView").hidden = false; $("#loginError").textContent = message;
@@ -75,7 +115,7 @@
     }).join("");
     const items = state.schedule.filter(row => row.broadcast_date === state.calendarDate).sort((a, b) => (a.broadcast_time || "").localeCompare(b.broadcast_time || "") || a.id - b.id);
     $("#calendarDayHeading").textContent = state.calendarDate + " 的稿件"; $("#calendarDayCount").textContent = items.length + " 篇";
-    $("#calendarDayItems").innerHTML = items.length ? items.map(row => `<article class="day-manuscript" data-manuscript-id="${row.id}"><div class="day-manuscript-heading"><time>${esc(row.broadcast_time || "未设置时间")}</time><span class="badge ${statusClass(row.status)}">${esc(row.status)}</span></div><p class="day-manuscript-content">${esc(row.content)}</p><p class="manuscript-meta">${esc(row.author)} · ${esc(row.class_name)}<br>${esc(row.code)}</p><p class="operator-meta">${operatorMeta(row)}</p>${row.note ? `<p class="day-manuscript-note">备注：${esc(row.note)}</p>` : ""}<div class="day-manuscript-actions"><label for="calendarStatus${row.id}">播出状态</label><select class="select" id="calendarStatus${row.id}" data-calendar-status="${row.id}" ${state.busy ? "disabled" : ""}><option value="已通过" ${row.status === "已通过" ? "selected" : ""}>待播出</option><option value="已播出" ${row.status === "已播出" ? "selected" : ""}>已播出</option></select><button type="button" class="btn btn-ghost btn-sm" data-save-calendar-status="${row.id}" ${state.busy ? "disabled" : ""}>保存状态</button></div></article>`).join("") : '<p class="empty-state">当天没有安排播出的稿件。</p>';
+    $("#calendarDayItems").innerHTML = items.length ? items.map(row => `<article class="day-manuscript" data-manuscript-id="${row.id}"><div class="day-manuscript-heading"><time>${esc(row.broadcast_time || "未设置时间")}</time><span class="badge ${statusClass(row.status)}">${esc(row.status)}</span></div><p class="day-manuscript-content">${esc(row.content)}</p><p class="manuscript-meta">${esc(row.author)} · ${esc(row.class_name)}<br>${esc(row.code)}</p><p class="operator-meta">${operatorMeta(row)}</p>${row.note ? `<p class="day-manuscript-note">备注：${esc(row.note)}</p>` : ""}<div class="day-manuscript-actions"><label for="calendarStatus${row.id}">播出状态</label><select class="select" id="calendarStatus${row.id}" data-calendar-status="${row.id}" ${state.busy ? "disabled" : ""}><option value="已通过" ${row.status === "已通过" ? "selected" : ""}>待播出</option><option value="已播出" ${row.status === "已播出" ? "selected" : ""}>已播出</option></select><button type="button" class="text-button" data-calendar-history="${row.id}">操作日志</button><button type="button" class="btn btn-ghost btn-sm" data-save-calendar-status="${row.id}" ${state.busy ? "disabled" : ""}>保存状态</button></div></article>`).join("") : '<p class="empty-state">当天没有安排播出的稿件。</p>';
   }
   function changeCalendarMonth(value) {
     if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(value)) return;
@@ -102,7 +142,7 @@
     try { if (view === "calendar") await loadSchedule(); else await loadList(); } catch (error) { showError(error.message); }
   }
   async function loadDashboard() {
-    const results = await Promise.allSettled([refreshStats(), loadServer(), loadSchedule(), loadAudit()]);
+    const results = await Promise.allSettled([refreshStats(), loadServer(), loadSchedule()]);
     const failure = results.find(result => result.status === "rejected"); if (failure) showError(failure.reason.message);
   }
   function filters() {
@@ -121,7 +161,7 @@
     renderList(); updateSelection();
   }
   function renderList() {
-    $("#manuscriptBody").innerHTML = state.items.length ? state.items.map(row => `<tr data-id="${row.id}" class="${state.selected.has(row.id) ? "selected" : ""}"><td class="checkbox-cell"><input type="checkbox" data-select="${row.id}" ${state.selected.has(row.id) ? "checked" : ""} aria-label="选择稿件 ${esc(row.code)}"></td><td><p class="manuscript-copy">${esc(row.content)}</p><p class="manuscript-meta">${esc(row.author)} · ${esc(row.class_name)}<br>${esc(row.code)} · ${esc(row.created_at.replace("T", " ").slice(0, 16))}${row.broadcast_date ? `<br>播出：${esc(row.broadcast_date)} ${esc(row.broadcast_time)}` : ""}</p></td><td><span class="badge ${statusClass(row.status)}">${esc(row.status)}</span><p class="operator-meta">${operatorMeta(row)}</p></td></tr>`).join("") : '<tr><td colspan="3" class="empty-state">暂无符合条件的稿件</td></tr>';
+    $("#manuscriptBody").innerHTML = state.items.length ? state.items.map(row => `<tr data-id="${row.id}" class="${state.selected.has(row.id) ? "selected" : ""}"><td class="checkbox-cell"><input type="checkbox" data-select="${row.id}" ${state.selected.has(row.id) ? "checked" : ""} aria-label="选择稿件 ${esc(row.code)}"></td><td><p class="manuscript-copy">${esc(row.content)}</p><p class="manuscript-meta">${esc(row.author)} · ${esc(row.class_name)}<br>${esc(row.code)} · ${esc(row.created_at.replace("T", " ").slice(0, 16))}${row.broadcast_date ? `<br>播出：${esc(row.broadcast_date)} ${esc(row.broadcast_time)}` : ""}</p></td><td><span class="badge ${statusClass(row.status)}">${esc(row.status)}</span><p class="operator-meta">${operatorMeta(row)}</p><button type="button" class="text-button manuscript-history-link" data-history="${row.id}">操作日志</button></td></tr>`).join("") : '<tr><td colspan="3" class="empty-state">暂无符合条件的稿件</td></tr>';
     $("#listCount").textContent = "共 " + state.total + " 篇"; $("#pagerInfo").textContent = "第 " + state.page + " / " + state.pages + " 页";
     $("#pagerBtns").innerHTML = `<button data-page="prev" ${state.page === 1 ? "disabled" : ""}>上一页</button><button data-page="next" ${state.page >= state.pages ? "disabled" : ""}>下一页</button>`;
     $("#selectPage").disabled = !state.items.length; $("#selectPage").checked = !!state.items.length && state.selected.size === state.items.length; $("#selectPage").indeterminate = !!state.selected.size && state.selected.size < state.items.length;
@@ -130,6 +170,12 @@
     const selected = state.items.filter(row => state.selected.has(row.id)), single = selected.length === 1, active = selected.length && !state.busy;
     $("#selectionCount").textContent = "已选 " + selected.length + " 篇"; $("#selectionEmpty").hidden = !!selected.length; $("#selectedDetails").hidden = !selected.length;
     $("#selectedDetails").innerHTML = single ? `<p>${esc(selected[0].content)}</p><small>${esc(selected[0].code)} · ${esc(selected[0].author)}<br>${esc(selected[0].class_name)}<br>联系方式：${esc(selected[0].contact || "未填写")}</small><p class="operator-meta">${operatorMeta(selected[0])}</p>` : selected.map(row => `<p>${esc(row.code)} · ${esc(row.author)}</p>`).join("");
+    $("#submissionHistoryPanel").hidden = !single;
+    const historyId = single ? selected[0].id : null;
+    if (historyId !== state.historyId) {
+      state.historyId = historyId; state.historyPage = 1; state.historyRequestId = (state.historyRequestId || 0) + 1;
+      if (historyId) { $("#submissionHistory").textContent = "正在加载操作历史…"; loadSubmissionHistory(); }
+    }
     $("#approveSelected").disabled = $("#rejectSelected").disabled = !active;
     $("#scheduleSelected").disabled = $("#markPlayed").disabled = !active || !selected.every(row => row.status === "已通过");
     $("#clearSchedule").disabled = !active || !selected.every(row => row.broadcast_date && ["已通过", "已播出"].includes(row.status));
@@ -141,7 +187,6 @@
   function selectionChanged() {
     const selected = state.items.filter(row => state.selected.has(row.id));
     $("#operationNote").value = selected.length === 1 ? selected[0].note : "";
-    $("#operationScore").value = selected.length === 1 ? selected[0].score ?? "" : "";
     $("#scheduleDate").value = selected.length === 1 ? selected[0].broadcast_date : "";
     $("#scheduleTime").value = selected.length === 1 ? selected[0].broadcast_time || "12:00" : "12:00";
     renderList(); updateSelection();
@@ -150,9 +195,13 @@
     if (!names[view]) return; clearTimeout(searchTimer); state.view = view; state.page = 1; state.selected.clear(); state.items = []; state.requestId++;
     showError(""); $("#activeViewName").textContent = names[view]; $$(".nav-item").forEach(button => { const active = button.dataset.view === view; button.classList.toggle("active", active); button.setAttribute("aria-current", active ? "page" : "false"); });
     $("#dashboardPanel").hidden = view !== "dashboard"; $("#manuscriptPanel").hidden = !["review", "approved"].includes(view); $("#messagesPanel").hidden = view !== "messages";
+    $("#auditPanel").hidden = view !== "audit"; $("#developerPanel").hidden = view !== "developer";
+    if (!["review", "approved"].includes(view)) { state.historyId = null; state.historyRequestId = (state.historyRequestId || 0) + 1; }
     try {
       if (view === "dashboard") await loadDashboard();
       else if (view === "messages") await loadMessages();
+      else if (view === "audit") await loadAudit();
+      else if (view === "developer") await loadLogs();
       else {
         $("#manuscriptTitle").textContent = names[view]; $("#manuscriptDescription").textContent = view === "review" ? "未审批稿件按列表展示，选中后在右侧操作。" : "管理已审批稿件，安排播出日程或更新播出状态。";
         $("#approveAllButton").hidden = $("#reviewActions").hidden = view !== "review"; $("#approvedActions").hidden = $("#filterStatus").hidden = view !== "approved";
@@ -181,6 +230,7 @@
   function confirm(title, message, accept = "确认操作", risk = false) {
     const dialog = $("#confirmDialog"); if (dialog.open) return Promise.resolve(false);
     $("#confirmTitle").textContent = title; $("#confirmMessage").textContent = message; $("#confirmLabel").textContent = risk ? "风险操作" : "操作确认"; $("#confirmAccept").textContent = accept; dialog.returnValue = "";
+    $("#confirmActor").textContent = "本次操作账号：" + state.username;
     return new Promise(resolve => { dialog.addEventListener("close", () => resolve(dialog.returnValue === "confirm"), { once: true }); dialog.showModal(); });
   }
   async function action(kind) {
@@ -205,9 +255,9 @@
   }
   async function saveSingle() {
     if (state.selected.size !== 1 || state.busy) return;
-    const score = $("#operationScore").value, number = score === "" ? null : Number(score);
-    if (number !== null && (!Number.isInteger(number) || number < 0 || number > 100)) return toast("评分须为 0–100 的整数。", true);
-    try { await api("/api/admin/submissions/" + [...state.selected][0], { method: "PATCH", body: JSON.stringify({ score: number, note: $("#operationNote").value.trim() }) }); toast("评分和备注已保存"); await refreshAfterAction(); } catch (error) { toast(error.message, true); }
+    state.busy = true; updateSelection();
+    try { await api("/api/admin/submissions/" + [...state.selected][0], { method: "PATCH", body: JSON.stringify({ note: $("#operationNote").value.trim() }) }); toast("备注已保存"); await refreshAfterAction(); } catch (error) { toast(error.message, true); }
+    finally { state.busy = false; updateSelection(); }
   }
   async function deleteSingle() {
     if (state.selected.size !== 1) return; const id = [...state.selected][0];
@@ -217,7 +267,7 @@
   async function loadMessages() {
     const data = await api("/api/admin/announcements"), items = data.items || [];
     $("#messageCount").textContent = items.length + " 条";
-    $("#messageHistory").innerHTML = items.length ? items.map(item => `<article class="message-history-item ${item.published ? "" : "withdrawn"}"><span class="message-kind">${esc(item.kind)}${item.published ? "" : " · 已撤回"}</span><h3>${esc(item.title)}</h3><p class="announcement-meta">${esc(item.published_at.slice(0, 10))} · 发布者：${esc(item.publisher)}${item.updated_by ? `<br>最近操作人：${esc(item.updated_by)} · ${esc(item.updated_at.replace("T", " "))}` : ""}</p><p class="announcement-content">${esc(item.content)}</p><div class="message-operations"><button class="text-button" data-message-id="${item.id}" data-published="${!item.published}">${item.published ? "撤回消息" : "恢复发布"}</button><button class="text-button danger-text" data-delete-message="${item.id}">删除</button></div></article>`).join("") : '<p class="empty-state">暂无消息，发布后会显示在投稿页公告栏。</p>';
+    $("#messageHistory").innerHTML = items.length ? items.map(item => `<article class="message-history-item ${item.published ? "" : "withdrawn"}"><span class="message-kind">${item.published ? "已发布" : "已撤回"}</span><h3>${esc(item.title)}</h3><p class="announcement-meta">${esc(item.published_at.slice(0, 10))} · 发布者：${esc(item.publisher)}${item.updated_by ? `<br>最近操作人：${esc(item.updated_by)} · ${esc(item.updated_at.replace("T", " "))}` : ""}</p><p class="announcement-content">${esc(item.content)}</p><div class="message-operations"><button class="text-button" data-message-id="${item.id}" data-published="${!item.published}">${item.published ? "撤回消息" : "恢复发布"}</button><button class="text-button danger-text" data-delete-message="${item.id}">删除</button></div></article>`).join("") : '<p class="empty-state">暂无公告，发布后会显示在投稿页公告栏。</p>';
   }
   async function exportFile(format) {
     try {
@@ -235,17 +285,30 @@
   });
   $$("[data-view]").forEach(button => button.addEventListener("click", () => showView(button.dataset.view)));
   $$("[data-approved-view]").forEach(button => button.addEventListener("click", () => switchApprovedView(button.dataset.approvedView)));
-  $("#calendarDayItems").addEventListener("click", event => { const button = event.target.closest("[data-save-calendar-status]"); if (button && !button.disabled) saveCalendarStatus(Number(button.dataset.saveCalendarStatus)); });
+  $("#calendarDayItems").addEventListener("click", event => { const history = event.target.closest("[data-calendar-history]"); if (history) { const row = state.schedule.find(item => item.id === Number(history.dataset.calendarHistory)); if (row) { $("#auditType").value = "submission"; $("#auditQuery").value = row.code; $("#auditStart").value = $("#auditEnd").value = ""; state.auditPage = 1; showView("audit"); } return; } const button = event.target.closest("[data-save-calendar-status]"); if (button && !button.disabled) saveCalendarStatus(Number(button.dataset.saveCalendarStatus)); });
   $("#openBroadcastCalendar").addEventListener("click", () => { state.approvedView = "calendar"; showView("approved"); });
   $("#calendarDays").addEventListener("click", event => { const button = event.target.closest("[data-calendar-date]"); if (button) { state.calendarDate = button.dataset.calendarDate; state.calendarMonth = state.calendarDate.slice(0, 7); renderCalendar(); } });
   $("#calendarMonth").addEventListener("change", event => { changeCalendarMonth(event.target.value); });
   for (const [id, step] of [["#calendarPrev", -1], ["#calendarNext", 1]]) $(id).addEventListener("click", () => { const [year, month] = state.calendarMonth.split("-").map(Number); changeCalendarMonth(dateKey(calendarDate(year, month - 1 + step, 1)).slice(0, 7)); });
   $("#calendarToday").addEventListener("click", () => { state.calendarDate = todayKey(); state.calendarMonth = state.calendarDate.slice(0, 7); renderCalendar(); });
   $("#refreshDashboard").addEventListener("click", () => { showError(""); loadDashboard(); });
+  $("#auditFilters").addEventListener("submit", event => { event.preventDefault(); state.auditPage = 1; showError(""); loadAudit().catch(error => showError(error.message)); });
+  $("#resetAudit").addEventListener("click", () => { $("#auditFilters").reset(); state.auditPage = 1; showError(""); loadAudit().catch(error => showError(error.message)); });
+  $("#refreshAudit").addEventListener("click", () => { showError(""); loadAudit().catch(error => showError(error.message)); });
+  $("#refreshSubmissionHistory").addEventListener("click", loadSubmissionHistory);
+  for (const [id, step] of [["#historyPrevious", -1], ["#historyNext", 1]]) $(id).addEventListener("click", () => { state.historyPage = Math.max(1, Math.min(state.historyPages || 1, (state.historyPage || 1) + step)); loadSubmissionHistory(); });
+  for (const id of ["#refreshLogs", "#logLines"]) $(id).addEventListener(id === "#logLines" ? "change" : "click", () => { showError(""); loadLogs().catch(error => showError(error.message)); });
+  $("#copyLogs").addEventListener("click", async () => {
+    try {
+      if (navigator.clipboard?.writeText) await navigator.clipboard.writeText($("#serverLogs").textContent);
+      else { const range = document.createRange(); range.selectNodeContents($("#serverLogs")); const selection = window.getSelection(); selection.removeAllRanges(); selection.addRange(range); if (!document.execCommand("copy")) throw new Error("请选中日志后手动复制。"); selection.removeAllRanges(); }
+      toast("日志已复制");
+    } catch (error) { toast(error.message || "请选中日志后手动复制。", true); }
+  });
   for (const [id, step] of [["#auditPrevious", -1], ["#auditNext", 1]]) $(id).addEventListener("click", () => { state.auditPage = Math.max(1, Math.min(state.auditPages || 1, (state.auditPage || 1) + step)); loadAudit().catch(error => showError(error.message)); });
   $("#selectPage").addEventListener("change", event => { state.selected = new Set(event.target.checked ? state.items.map(row => row.id) : []); selectionChanged(); });
   $("#manuscriptBody").addEventListener("change", event => { if (event.target.matches("[data-select]")) { const id = Number(event.target.dataset.select); if (event.target.checked) state.selected.add(id); else state.selected.delete(id); selectionChanged(); } });
-  $("#manuscriptBody").addEventListener("click", event => { if (event.target.closest("input,button,a")) return; const row = event.target.closest("tr[data-id]"); if (row) { const id = Number(row.dataset.id); if (state.selected.has(id)) state.selected.delete(id); else state.selected.add(id); selectionChanged(); } });
+  $("#manuscriptBody").addEventListener("click", event => { const history = event.target.closest("[data-history]"); if (history) { state.selected = new Set([Number(history.dataset.history)]); selectionChanged(); $("#submissionHistoryPanel").scrollIntoView({ block: "nearest" }); return; } if (event.target.closest("input,button,a")) return; const row = event.target.closest("tr[data-id]"); if (row) { const id = Number(row.dataset.id); if (state.selected.has(id)) state.selected.delete(id); else state.selected.add(id); selectionChanged(); } });
   $("#pagerBtns").addEventListener("click", event => { const button = event.target.closest("[data-page]"); if (!button || button.disabled) return; state.page += button.dataset.page === "next" ? 1 : -1; loadList().catch(error => showError(error.message)); });
   let searchTimer; $("#filterQ").addEventListener("input", () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => { state.page = 1; loadList().catch(error => showError(error.message)); }, 250); });
   $("#filterStatus").addEventListener("change", () => { state.page = 1; loadList().catch(error => showError(error.message)); });
@@ -263,9 +326,9 @@
   });
   $("#messagePublishAs").addEventListener("change", updatePublisher);
   $("#messageForm").addEventListener("submit", async event => {
-    event.preventDefault(); const body = { title: $("#messageTitle").value.trim(), content: $("#messageContent").value.trim(), kind: $("#messageKind").value, publish_as: $("#messagePublishAs").value };
+    event.preventDefault(); const body = { title: $("#messageTitle").value.trim(), content: $("#messageContent").value.trim(), publish_as: $("#messagePublishAs").value };
     if (!body.title || !body.content) return toast("请填写消息标题和内容。", true); $("#publishMessage").disabled = true;
-    try { await post("/api/admin/announcements", body); $("#messageForm").reset(); updatePublisher(); toast("消息已发布到公告栏"); await loadMessages(); } catch (error) { toast(error.message, true); }
+    try { await post("/api/admin/announcements", body); $("#messageForm").reset(); updatePublisher(); toast("公告已发布到公告栏"); await loadMessages(); } catch (error) { toast(error.message, true); }
     finally { $("#publishMessage").disabled = false; }
   });
   $("#messageHistory").addEventListener("click", async event => {
@@ -283,7 +346,7 @@
     finally { $("#changePassword").disabled = false; }
   });
   $("#btnLogout").addEventListener("click", async () => { try { await post("/api/admin/logout", {}); } catch (_) { /* 会话过期也返回登录页 */ } loginView(); });
-  if (location.protocol === "file:") { loginView("请按照 README.md 启动项目，再通过 http://127.0.0.1:8000/admin 打开后台。"); return; }
+  if (location.protocol === "file:") { loginView("请按照 README.md 启动项目，再通过 http://127.0.0.1/admin 打开后台。"); return; }
   if (state.token) { api("/api/admin/me").then(data => { setAccount(data.username); $("#dashView").hidden = false; return showView("dashboard"); }).catch(error => { if (state.token) showError(error.message); }); }
   else loginView();
 })();
