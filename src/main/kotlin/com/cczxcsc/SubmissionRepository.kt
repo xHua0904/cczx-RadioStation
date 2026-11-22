@@ -10,13 +10,16 @@ data class Filters(val where: String, val args: List<Any>)
 @Repository
 class SubmissionRepository(val jdbc: JdbcTemplate) {
     private val mapper = RowMapper { rs: ResultSet, _: Int ->
+        val storedContent = rs.getString("content")
+        val notes = if (rs.getString("song_name").isNotBlank() && rs.getString("artist").isNotBlank()) SongRequestContent.decode(storedContent) else null
+        val content = if (notes == null) storedContent else SongRequestContent.summary(rs.getString("song_name"), rs.getString("artist"), notes)
         Submission(
             rs.getLong("id"), rs.getString("code"), rs.getString("author"), rs.getString("class_name"),
-            rs.getString("contact"), rs.getString("category"), rs.getString("title"), rs.getString("content"),
+            rs.getString("contact"), rs.getString("category"), rs.getString("title"), content,
             rs.getString("status"), rs.getString("broadcast_date"), rs.getString("note"),
             rs.getString("source"), rs.getString("created_at"), rs.getString("updated_at"),
             rs.getString("song_name"), rs.getString("artist"), rs.getString("song_url"), rs.getString("period"), rs.getString("broadcast_time"),
-            rs.getString("reviewed_by"), rs.getString("scheduled_by"), rs.getString("updated_by")
+            rs.getString("reviewed_by"), rs.getString("scheduled_by"), rs.getString("updated_by"), notes?.message.orEmpty(), notes?.reason.orEmpty(), if (notes == null) storedContent else ""
         )
     }
 
@@ -63,7 +66,7 @@ class SubmissionRepository(val jdbc: JdbcTemplate) {
         val args = mutableListOf<Any>()
         val q = params["q"].orEmpty().trim().take(200)
         if (q.isNotEmpty()) {
-            val names = listOf("code", "author", "class_name", "title", "content")
+            val names = listOf("code", "author", "class_name", "title", "song_name", "artist", "content")
             clauses += names.joinToString(" OR ", "(", ")") { "$it LIKE ?" }
             names.forEach { args += "%$q%" }
         }

@@ -6,7 +6,7 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.sql.ResultSet
 
-data class AnnouncementInput(val title: String = "", val content: String = "", val publishAs: String = "current_account")
+data class AnnouncementInput(val title: String = "", val content: String = "")
 data class Announcement(val id: Long, val title: String, val content: String,
     val publisher: String, val published: Boolean, val createdAt: String, val publishedAt: String,
     val updatedBy: String = "", val updatedAt: String = "")
@@ -24,11 +24,7 @@ class PublicationService(private val jdbc: JdbcTemplate, private val audit: Audi
     fun publish(input: AnnouncementInput, actor: String): Map<String, Any> {
         val title = Validation.text(input.title, "公告标题", min = 1, max = 80)
         val content = Validation.text(input.content, "公告内容", min = 1, max = 2000)
-        val publisher = when (input.publishAs) {
-            "current_account" -> actor
-            "media_center" -> "新媒体中心"
-            else -> throw ApiError(400, "发布身份不正确")
-        }
+        val publisher = actor
         val time = nowIso()
         val id = jdbc.queryForObject("INSERT INTO announcements(title,content,kind,period,publisher,published,created_at,published_at,updated_by,updated_at) VALUES(?,?,?,?,?,1,?,?,?,?) RETURNING id",
             Long::class.java, title, content, "公告", "", publisher, time, time, actor, time)!!

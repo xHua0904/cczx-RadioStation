@@ -18,7 +18,8 @@ data class SubmissionInput(
     val author: String = "", val className: String = "", val contact: String = "",
     val category: String = "", val title: String = "", val content: String = "",
     val songName: String = "", val artist: String = "", val songUrl: String = "",
-    val status: String = "待审核", val note: String = "", val period: String = ""
+    val status: String = "待审核", val note: String = "", val period: String = "",
+    val message: String = "", val reason: String = ""
 )
 
 data class Submission(
@@ -28,7 +29,8 @@ data class Submission(
     val source: String, val createdAt: String, val updatedAt: String,
     val songName: String, val artist: String, val songUrl: String,
     val period: String = "", val broadcastTime: String = "",
-    val reviewedBy: String = "", val scheduledBy: String = "", val updatedBy: String = ""
+    val reviewedBy: String = "", val scheduledBy: String = "", val updatedBy: String = "",
+    val message: String = "", val reason: String = "", val legacyContent: String = ""
 )
 
 object Validation {
@@ -57,20 +59,25 @@ object Validation {
     }
 
     fun submission(input: SubmissionInput, admin: Boolean = false): SubmissionInput {
-        val content = text(input.content, "投稿内容", min = 1, max = 100)
+        val songRequest = listOf(input.songName, input.artist, input.message, input.reason).any { it.isNotBlank() }
+        val songName = if (songRequest) text(input.songName, "点播歌曲名称", min = 1, max = 80) else ""
+        val artist = if (songRequest) text(input.artist, "歌手", min = 1, max = 80) else ""
+        val message = if (songRequest) text(input.message, "简短寄语", max = 100, required = false) else ""
+        val reason = if (songRequest) text(input.reason, "点播理由", max = 300, required = false) else ""
+        val content = if (songRequest) SongRequestContent.encode(message, reason) else text(input.content, "投稿内容", min = 1, max = 100)
         val period = input.period.ifBlank { Weeks.current().key }
         Weeks.parse(period)
         if (!admin && period !in Weeks.available().map { it.key }) throw ApiError(400, "请选择当前开放的投稿周次")
-        val category = input.category.ifBlank { "其他" }
+        val category = input.category.ifBlank { if (songRequest) "点歌祝福" else "其他" }
         if (category !in categories) throw ApiError(400, "栏目不正确")
         val suppliedTitle = text(input.title, "标题", max = 60, required = false)
-        val title = suppliedTitle.ifBlank { content.lineSequence().first().take(60) }
+        val title = if (songRequest) songName.take(60) else suppliedTitle.ifBlank { content.lineSequence().first().take(60) }
         if (input.status !in statuses) throw ApiError(400, "状态不合法")
         return input.copy(
             author = text(input.author, "姓名", min = 2, max = 20),
             className = if (admin) text(input.className, "班级", min = 2, max = 30) else publicClass(input.className),
             contact = text(input.contact, "联系方式", max = 50, required = false),
-            category = category, title = title, content = content, songName = "", artist = "", songUrl = "", period = period,
+            category = category, title = title, content = content, songName = songName, artist = artist, songUrl = "", period = period, message = message, reason = reason,
             status = if (admin) input.status else "待审核", note = if (admin) text(input.note, "备注", max = 300, required = false) else ""
         )
     }

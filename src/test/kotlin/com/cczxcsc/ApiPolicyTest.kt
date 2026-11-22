@@ -72,18 +72,20 @@ class ApiPolicyTest {
         assertEquals(200, request("PATCH", "/api/admin/submissions/$id", mapOf("status" to "已通过"), tokens[1]).statusCode())
         assertEquals(200, request("DELETE", "/api/admin/submissions/$id", token = tokens[1]).statusCode())
     }
-    @Test fun `公告可选择公开署名且实际操作人不能伪造`() {
+    @Test fun `公告始终使用当前账号且旧发布身份字段不能伪造发布者`() {
         val token = login("网络部")
-        for ((mode, publisher) in listOf("current_account" to "网络部", "media_center" to "新媒体中心")) {
+        for (mode in listOf("current_account", "media_center", "arbitrary")) {
             val response = request("POST", "/api/admin/announcements", mapOf("title" to mode, "content" to "公告正文", "publish_as" to mode, "publisher" to "伪造署名"), token)
             assertEquals(200, response.statusCode())
             val id = json.readTree(response.body()).path("id").asLong()
             val item = json.readTree(request("GET", "/api/announcements").body()).path("items").first()
-            assertEquals(publisher, item.path("publisher").asText()); assertEquals("网络部", item.path("updated_by").asText())
+            assertEquals("网络部", item.path("publisher").asText()); assertEquals("网络部", item.path("updated_by").asText())
             assertEquals("网络部", repo.jdbc.queryForObject("SELECT username FROM audit_log WHERE target_id=? AND action='发布公告'", String::class.java, id.toString()))
         }
         assertEquals(0, repo.jdbc.queryForObject("SELECT COUNT(*) FROM accounts WHERE username='新媒体中心'", Int::class.java))
-        assertEquals(400, request("POST", "/api/admin/announcements", mapOf("title" to "错误身份", "content" to "正文", "publish_as" to "arbitrary"), token).statusCode())
+        val second = login("科创社")
+        assertEquals(200, request("POST", "/api/admin/announcements", mapOf("title" to "另一账号公告", "content" to "正文"), second).statusCode())
+        assertEquals("科创社", json.readTree(request("GET", "/api/announcements").body()).path("items").first().path("publisher").asText())
     }
     @Test fun `删除账号会注销该账号会话并保留其他账号和历史公告`() {
         val first = login("网络部"); val second = login("科创社")

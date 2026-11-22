@@ -92,14 +92,23 @@ async function screenshot(name) {
   await writeFile(path.join(profile, name + '.png'), Buffer.from(capture.data, 'base64'));
 }
 
+async function accountCommand(command) {
+  // 管理命令只访问本轮独立测试库，先检查空库，之后才显式添加测试账号。
+  const child = spawn('java', ['-Dfile.encoding=UTF-8', '-Dsun.stdout.encoding=UTF-8', '-Dsun.stderr.encoding=UTF-8', '-jar', path.join(root, 'target', 'cczx-RadioStation.jar'), command, '--spring.main.banner-mode=off', '--logging.level.root=ERROR', '--spring.profiles.active=', '--spring.datasource.url=jdbc:sqlite:' + path.join(run, 'test.db'), '--app.data-dir=' + run], { cwd: root, windowsHide: true, env: { ...process.env, DATA_DIR: run, LOG_DIR: path.join(run, 'logs') } });
+  let output = ''; child.stdout.on('data', chunk => { output += chunk; }); child.stderr.on('data', chunk => { output += chunk; });
+  const timer = setTimeout(() => child.kill(), 30000);
+  try {
+    assert.equal(await new Promise((resolve, reject) => { child.once('error', reject); child.once('exit', resolve); }), 0, output);
+    return output;
+  } finally { clearTimeout(timer); }
+}
+
 async function main() {
   await mkdir(run, { recursive: true }); await mkdir(profile, { recursive: true });
-  for (const username of ['新媒体中心', '网络部', '科创社']) {
-    const child = spawn('java', ['-jar', path.join(root, 'target', 'cczx-RadioStation.jar'), '--add-account=' + username, '--spring.main.banner-mode=off', '--logging.level.root=ERROR', '--spring.profiles.active=', '--spring.datasource.url=jdbc:sqlite:' + path.join(run, 'test.db'), '--app.data-dir=' + run], { cwd: root, windowsHide: true, env: { ...process.env, DATA_DIR: run, LOG_DIR: path.join(run, 'logs') } });
-    let output = ''; child.stdout.on('data', chunk => { output += chunk; }); child.stderr.on('data', chunk => { output += chunk; });
-    const timer = setTimeout(() => child.kill(), 30000);
-    try { assert.equal(await new Promise((resolve, reject) => { child.once('error', reject); child.once('exit', resolve); }), 0, output); }
-    finally { clearTimeout(timer); }
+  assert.ok((await accountCommand('--list-accounts')).includes('暂无账号'));
+  console.log('PASS 无默认账户：新建测试库账号为空；随后显式添加的账号仅用于本轮测试');
+  for (const username of ['浏览器测试管理员', '网络部', '科创社']) {
+    await accountCommand('--add-account=' + username);
   }
   const port = await freePort(); base = 'http://127.0.0.1:' + port;
   let javaLog = '', browserLog = '';
@@ -120,14 +129,19 @@ async function main() {
   await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1100, deviceScaleFactor: 1, mobile: false });
   await navigate('/', 'document.querySelector("#submitBtn") && !document.querySelector("#submitBtn").disabled');
   assert.equal(await cdp.eval('document.querySelector("#period") === null'), true);
-  assert.equal(await cdp.eval('document.querySelectorAll("#song_name,#artist,#song_url,#trackForm").length'), 0);
+  assert.equal(await cdp.eval('document.querySelectorAll("#song_name,#artist,#message,#reason").length'), 4);
+  assert.equal(await cdp.eval('document.querySelectorAll("#content,#song_url,#trackForm").length'), 0);
   await fill('#author', '浏览器同学'); await fill('#class_name', '高一1班');
-  for (const invalid of ['   ', '稿'.repeat(101)]) {
-    await fill('#content', invalid); await click('#submitBtn');
-    assert.ok(await cdp.eval('document.querySelector("[data-field=content]").classList.contains("invalid")'));
+  for (const invalid of ['   ', '歌'.repeat(81)]) {
+    await fill('#song_name', invalid); await click('#submitBtn');
+    assert.ok(await cdp.eval('document.querySelector("[data-field=song_name]").classList.contains("invalid")'));
     assert.equal((await api('/api/meta')).total, 0);
   }
-  await fill('#content', '校园里的每一天都值得记录。'); await click('#submitBtn');
+  await fill('#song_name', '稻香'); await fill('#artist', '周杰伦');
+  await fill('#message', '校园里的每一天都值得记录。'); await fill('#reason', '希望在午间广播听到这首歌。');
+  assert.equal(await cdp.eval('document.querySelector("#previewSong").textContent'), '稻香');
+  await noOverflow('桌面投稿页'); await screenshot('public-desktop');
+  await click('#submitBtn');
   await waitPage('document.querySelector("#successPanel").classList.contains("show")');
   assert.equal((await api('/api/meta')).total, 1);
   assert.equal(await cdp.eval('document.querySelector("#class_name").tagName'), 'SELECT');
@@ -140,15 +154,15 @@ async function main() {
   assert.equal(await cdp.eval('document.querySelector(".github-link").href'), 'https://github.com/xHua0904/cczx-RadioStation');
   assert.ok(await cdp.eval('parseFloat(getComputedStyle(document.querySelector(".site-credit strong")).fontSize) > parseFloat(getComputedStyle(document.querySelector(".site-credit p")).fontSize)'));
   await cdp.eval('document.querySelector(".site-credit").scrollIntoView()'); await screenshot('footer-desktop');
-  console.log('PASS 投稿页：无期次选择、字数校验、提交、旧字段移除');
+  console.log('PASS 投稿页：四项点播字段、必填和字数校验、点播预览与提交');
 
-  const token = (await api('/api/admin/login', 'POST', { username: "新媒体中心", password: testPassword })).token;
+  const token = (await api('/api/admin/login', 'POST', { username: "浏览器测试管理员", password: testPassword })).token;
   const manuscript = { author: '测试同学', class_name: '高一二班', content: '待审批的校园稿件。' };
   await api('/api/submissions', 'POST', manuscript); await api('/api/submissions', 'POST', manuscript);
   await navigate('/admin.html', 'document.querySelector("#loginView") && !document.querySelector("#loginView").hidden');
-  await fill('#username', '新媒体中心'); await fill('#password', testPassword); await click('#loginBtn');
+  await fill('#username', '浏览器测试管理员'); await fill('#password', testPassword); await click('#loginBtn');
   await waitPage('!document.querySelector("#dashView").hidden && document.querySelector("#serverStatusBadge").textContent === "运行中"');
-  assert.ok(await cdp.eval('document.querySelector("#currentAccount").textContent.includes("新媒体中心")'));
+  assert.ok(await cdp.eval('document.querySelector("#currentAccount").textContent.includes("浏览器测试管理员")'));
   assert.equal(await cdp.eval('document.querySelectorAll(".nav-item").length'), 6);
   assert.equal(await cdp.eval('document.querySelectorAll("#filterPeriod,#newPeriod,#messagePeriod").length'), 0);
   const server = await api('/api/admin/server', 'GET', undefined, token);
@@ -161,8 +175,11 @@ async function main() {
 
   await click('.nav-item[data-view=review]');
   await waitPage('document.querySelectorAll("#manuscriptBody tr[data-id]").length === 3');
-  const firstId = await cdp.eval('Number(document.querySelector("#manuscriptBody tr[data-id]").dataset.id)');
-  await click('#manuscriptBody tr[data-id="' + firstId + '"]'); await click('#approveSelected');
+  const firstId = await cdp.eval('Number([...document.querySelectorAll("#manuscriptBody tr[data-id]")].find(row => row.querySelector(".song-title").textContent === "稻香").dataset.id)');
+  assert.ok(await cdp.eval('document.querySelector("#manuscriptBody").textContent.includes("周杰伦")'));
+  await click('#manuscriptBody tr[data-id="' + firstId + '"]');
+  assert.ok(await cdp.eval('document.querySelector("#selectedDetails").textContent.includes("希望在午间广播听到这首歌。")'));
+  await click('#approveSelected');
   await waitPage('document.querySelectorAll("#manuscriptBody tr[data-id]").length === 2 && !document.querySelector("#approveAllButton").disabled');
   assert.equal((await api('/api/admin/submissions?phase=reviewed', 'GET', undefined, token)).total, 1);
   await click('#approveAllButton'); await waitPage('document.querySelector("#confirmDialog").open');
@@ -254,12 +271,13 @@ async function main() {
   await click('.nav-item[data-view=messages]');
   await waitPage('!document.querySelector("#messagesPanel").hidden && document.querySelector("#messageCount").textContent === "0 条"');
   assert.equal(await cdp.eval('document.querySelector("#messageKind")'), null);
+  assert.equal(await cdp.eval('document.querySelector("#messagePublishAs")'), null);
   await fill('#messageTitle', '校园公告');
   await fill('#messageContent', '<img src=x onerror="window.injected=true">欢迎分享校园见闻'); await click('#publishMessage');
   await waitPage('document.querySelector("#messageCount").textContent === "1 条"');
   await screenshot('messages-desktop');
   await navigate('/', 'document.querySelectorAll(".announcement-card").length === 1');
-  assert.ok(await cdp.eval('document.querySelector(".announcement-card").textContent.includes("新媒体中心")'));
+  assert.ok(await cdp.eval('document.querySelector(".announcement-card").textContent.includes("浏览器测试管理员")'));
   assert.ok(await cdp.eval('/\\d{4}-\\d{2}-\\d{2}/.test(document.querySelector(".announcement-meta").textContent)'));
   assert.equal(await cdp.eval('document.querySelectorAll(".announcement-card img").length'), 0);
   assert.equal(await cdp.eval('window.injected === true'), false);
@@ -300,7 +318,7 @@ async function main() {
   await click('#btnLogout'); await fill('#username', '网络部'); await fill('#password', testPassword); await click('#loginBtn');
   await waitPage('document.querySelector("#currentAccount").textContent.includes("网络部") && !document.querySelector("#dashView").hidden');
   await click('.nav-item[data-view=audit]');
-  await waitPage('document.querySelector("#auditHistory").textContent.includes("新媒体中心")');
+  await waitPage('document.querySelector("#auditHistory").textContent.includes("浏览器测试管理员")');
   assert.ok(await cdp.eval('document.querySelector("#auditCount").textContent.includes("条记录")'));
   await click('.nav-item[data-view=developer]');
   await waitPage('document.querySelector("#serverLogs").textContent.includes("Started ApplicationKt")');
@@ -324,7 +342,7 @@ async function main() {
   await noOverflow('开发者工具');
   await click('.nav-item[data-view=approved]'); await click('#approvedScheduledTab');
   await waitPage('document.querySelectorAll("#manuscriptBody tr[data-id]").length === 3');
-  assert.ok(await cdp.eval('document.querySelector("#manuscriptBody").textContent.includes("审稿人：新媒体中心")'));
+  assert.ok(await cdp.eval('document.querySelector("#manuscriptBody").textContent.includes("审稿人：浏览器测试管理员")'));
   await click('[data-history="' + firstId + '"]');
   await waitPage('document.querySelector("#submissionHistory").textContent.includes("审核通过") && document.querySelector("#submissionHistory").textContent.includes("在线投稿")');
   assert.ok(await cdp.eval('document.querySelector("#operationAccount").textContent.includes("网络部")'));
@@ -347,15 +365,10 @@ async function main() {
   await navigate('/', 'document.querySelectorAll(".announcement-card").length === 1');
   assert.ok(await cdp.eval('document.querySelector(".announcement-meta").textContent.includes("网络部")'));
   await navigate('/admin.html', 'document.querySelector("#dashView") && !document.querySelector("#dashView").hidden');
-  await click('.nav-item[data-view=messages]'); await fill('#messagePublishAs', 'media_center');
-  assert.equal(await cdp.eval('document.querySelector("#messagePublisher").textContent'), '新媒体中心');
-  await fill('#messageTitle', '中心署名公告'); await fill('#messageContent', '以中心名义发布，实际操作人为网络部。'); await click('#publishMessage');
-  await waitPage('document.querySelector("#messageHistory").textContent.includes("中心署名公告") && document.querySelector("#messageHistory").textContent.includes("发布者：新媒体中心")');
-  assert.equal(await cdp.eval('document.querySelector("#messagePublishAs").value'), 'current_account');
+  await click('.nav-item[data-view=messages]');
+  assert.equal(await cdp.eval('document.querySelector("#messagePublishAs")'), null);
   assert.equal(await cdp.eval('document.querySelector("#messagePublisher").textContent'), '网络部');
-  await navigate('/', 'document.querySelectorAll(".announcement-card").length === 2');
-  assert.ok(await cdp.eval('[...document.querySelectorAll(".announcement-meta")].some(item => item.textContent.includes("发布者：新媒体中心"))'));
-  console.log('PASS 公告发布身份：当前账号与新媒体中心署名、实际操作人、发布后身份复位、公告栏发布者');
+  console.log('PASS 公告发布：删除发布身份选择、使用当前登录账号、公告栏显示实际发布者');
   await cdp.eval('document.querySelector(".site-credit").scrollIntoView()'); await screenshot('footer-mobile');
   await noOverflow('手机署名与 GitHub 链接');
   console.log('PASS 多账号：当前账号、审稿人与排期人、公告实际发布者、操作历史、署名及 GitHub 图标');

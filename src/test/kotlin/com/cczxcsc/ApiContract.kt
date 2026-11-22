@@ -110,13 +110,68 @@ abstract class ApiContract {
         val excel = request("GET", "/api/admin/export?format=xlsx", token = token)
         assertEquals(200, excel.statusCode())
         XSSFWorkbook(ByteArrayInputStream(excel.body())).use { workbook ->
-            assertEquals(2, workbook.numberOfSheets); assertEquals(song["content"], workbook.getSheet("投稿明细").getRow(1).getCell(5).stringCellValue)
+            assertEquals(2, workbook.numberOfSheets); assertEquals(song["content"], workbook.getSheet("投稿明细").getRow(1).getCell(9).stringCellValue)
             assertFalse((0 until workbook.getSheet("投稿明细").getRow(0).lastCellNum).any { workbook.getSheet("投稿明细").getRow(0).getCell(it).stringCellValue in setOf("投稿期次", "评分") })
         }
         assertEquals(200, request("DELETE", "/api/admin/submissions/$id", token = token).statusCode())
         assertEquals(0, data(request("GET", "/api/admin/stats", token = token)).path("total").asInt())
         assertEquals(200, request("POST", "/api/admin/logout", emptyMap<String, String>(), token).statusCode())
         assertEquals(401, request("GET", "/api/admin/stats", token = token).statusCode())
+    }
+
+    @Test fun `结构化点播分别保存选填内容并用于搜索日程和导出`() {
+        val payload = mapOf("author" to "测试同学", "class_name" to "高一11班", "song_name" to "稻香", "artist" to "周杰伦",
+            "message" to "愿同学们找到自己的节奏。", "reason" to "想在午间广播听到这首歌。", "contact" to "不公开的联系方式")
+        val response = request("POST", "/api/submissions", payload)
+        assertEquals(200, response.statusCode())
+        val code = data(response).path("code").asText()
+        val stored = repo.byCode(code)!!
+        assertEquals("稻香", stored.title); assertEquals("点歌祝福", stored.category)
+        assertEquals(payload["message"], stored.message); assertEquals(payload["reason"], stored.reason); assertEquals("", stored.legacyContent)
+        val raw = repo.jdbc.queryForObject("SELECT content FROM submissions WHERE id=?", String::class.java, stored.id)!!
+        assertEquals(payload["reason"], SongRequestContent.decode(raw)?.reason)
+        val token = login()
+        val search = data(request("GET", "/api/admin/submissions?q=" + java.net.URLEncoder.encode("周杰伦", Charsets.UTF_8), token = token))
+        assertEquals(1, search.path("total").asInt()); assertEquals("周杰伦", search.path("items").first().path("artist").asText())
+        assertEquals(200, request("PATCH", "/api/admin/submissions/${stored.id}", mapOf("status" to "已通过", "broadcast_date" to "2026-12-01"), token).statusCode())
+        val scheduled = data(request("GET", "/api/admin/schedule", token = token)).path("items").first()
+        assertEquals(payload["message"], scheduled.path("message").asText()); assertEquals(payload["reason"], scheduled.path("reason").asText())
+        val track = data(request("POST", "/api/submissions/track", mapOf("code" to code, "author" to "测试同学")))
+        assertEquals("稻香", track.path("song_name").asText()); assertEquals("周杰伦", track.path("artist").asText())
+        listOf("message", "reason", "content", "contact").forEach { assertFalse(track.has(it)) }
+        val csv = request("GET", "/api/admin/export?format=csv", token = token).body().toString(Charsets.UTF_8)
+        listOf("歌曲名称", "歌手", "简短寄语", "点播理由", payload["message"]!!, payload["reason"]!!).forEach { assertTrue(csv.contains(it)) }
+        XSSFWorkbook(ByteArrayInputStream(request("GET", "/api/admin/export?format=xlsx", token = token).body())).use { workbook ->
+            val sheet = workbook.getSheet("投稿明细")
+            assertEquals(19, sheet.getRow(0).lastCellNum.toInt())
+            listOf("稻香", "周杰伦", payload["message"], payload["reason"]).forEachIndexed { index, expected -> assertEquals(expected, sheet.getRow(1).getCell(index + 4).stringCellValue) }
+            assertEquals("", sheet.getRow(1).getCell(9).stringCellValue)
+        }
+    }
+
+    @Test fun `点播必须有歌名歌手且两项选填内容分别限制长度`() {
+        val required = mapOf("author" to "测试同学", "class_name" to "高一1班", "song_name" to "稻香", "artist" to "周杰伦")
+        for ((field, value) in listOf("song_name" to " ", "artist" to " ", "song_name" to "歌".repeat(81), "artist" to "人".repeat(81), "message" to "语".repeat(101), "reason" to "理".repeat(301))) {
+            assertEquals(400, request("POST", "/api/submissions", required + (field to value)).statusCode(), field)
+        }
+        assertEquals(0L, repo.count())
+        val empty = request("POST", "/api/submissions", required)
+        assertEquals(200, empty.statusCode())
+        val stored = repo.byCode(data(empty).path("code").asText())!!
+        assertEquals("", stored.message); assertEquals("", stored.reason); assertEquals("", stored.legacyContent)
+        assertEquals(200, request("POST", "/api/submissions", required + mapOf("message" to "语".repeat(100), "reason" to "理".repeat(300))).statusCode())
+    }
+
+    @Test fun `历史正文保持原文且普通JSON不能误作结构化点播`() {
+        val original = """{"message":"旧寄语","reason":"旧理由"}"""
+        val response = request("POST", "/api/submissions", song + ("content" to original))
+        val stored = repo.byCode(data(response).path("code").asText())!!
+        assertEquals(original, stored.content); assertEquals(original, stored.legacyContent)
+        assertEquals("", stored.message); assertEquals("", stored.reason)
+        repo.jdbc.update("UPDATE submissions SET song_name=?,artist=? WHERE id=?", "历史歌曲", "历史歌手", stored.id)
+        assertEquals(original, repo.byId(stored.id)!!.legacyContent)
+        assertNull(SongRequestContent.decode(original))
+        assertNull(SongRequestContent.decode("""{"_format":"cczx-song-request-v1","message":0,"reason":""}"""))
     }
 
     @Test fun `并发投稿编号不会重复且不会丢失`() {
@@ -235,5 +290,18 @@ abstract class ApiContract {
         val csv = request("GET", "/api/admin/export?format=csv", token = token).body().toString(Charsets.UTF_8)
         assertFalse(csv.lineSequence().first().contains("评分"))
         assertEquals("修改备注", data(request("GET", "/api/admin/audit?target_type=submission&target_id=$id", token = token)).path("items").first().path("action").asText())
+    }
+    @Test fun `页面不缓存且构建后的脚本和样式均携带资源版本`() {
+        for (path in listOf("/", "/admin", "/admin.html", "/credits.html")) {
+            val response = request("GET", path)
+            assertEquals(200, response.statusCode())
+            assertEquals("no-store", response.headers().firstValue("Cache-Control").orElse(""))
+            val html = response.body().toString(Charsets.UTF_8)
+            assertFalse(html.contains("@assets.version@"))
+            val assets = Regex("(?:src|href)=\"((?:js|css)/[^\"]+)\"").findAll(html).map { it.groupValues[1] }.toList()
+            assertTrue(assets.isNotEmpty())
+            assertTrue(assets.all { Regex(".+\\?v=\\d{14}").matches(it) })
+            for (asset in assets) assertEquals(200, request("GET", "/$asset").statusCode())
+        }
     }
 }

@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex">
 <title>新媒体中心 · 投稿管理</title>
-<link rel="icon" href="img/favicon.png"><link rel="stylesheet" href="css/style.css"><link rel="stylesheet" href="css/workspace.css">
+<link rel="icon" href="img/favicon.png"><link rel="stylesheet" href="css/style.css?v=@assets.version@"><link rel="stylesheet" href="css/workspace.css?v=@assets.version@">
+<link rel="stylesheet" href="css/glass.css?v=@assets.version@">
 </head>
 <body class="page-admin">
 <div class="login-wrap" id="loginView" hidden>
@@ -40,7 +41,7 @@
     <main class="workarea">
       <div id="workspaceError" class="workspace-error" role="alert" hidden></div>
       <section id="dashboardPanel" class="module-panel">
-        <div class="section-heading"><div><span class="eyebrow">工作概览</span><h1>控制台</h1><p>服务器运行状态与投稿数据，一目了然。</p></div><button class="btn btn-ghost" id="refreshDashboard" type="button">刷新数据</button></div>
+        <div class="section-heading"><div><span class="eyebrow">工作概览</span><h1>控制台</h1><p>查看服务状态、投稿统计和播出安排。</p></div><button class="btn btn-ghost" id="refreshDashboard" type="button">刷新数据</button></div>
         <div class="overview-stats" id="statGrid"></div>
         <div class="dashboard-grid">
           <article class="card dashboard-card"><div class="card-heading"><h2>服务器状态</h2><span class="badge" id="serverStatusBadge">连接中</span></div><dl class="server-metrics" id="serverData"><p class="empty-state">正在加载…</p></dl></article>
@@ -78,7 +79,7 @@
       </section>
 
       <section id="manuscriptPanel" class="module-panel" hidden>
-        <div class="section-heading"><div><span class="eyebrow" id="manuscriptEyebrow">编辑工作</span><h1 id="manuscriptTitle">稿件审批</h1><p id="manuscriptDescription">选择稿件，在右侧完成审批。</p></div><div class="heading-actions"><button class="btn btn-danger" id="approveAllButton" type="button">全部审核</button><button class="btn btn-ghost" id="newButton" type="button">手动登记</button></div></div>
+        <div class="section-heading"><div><span class="eyebrow" id="manuscriptEyebrow">编辑工作</span><h1 id="manuscriptTitle">稿件审批</h1><p id="manuscriptDescription">选中稿件，查看点播详情并进行审核。</p></div><div class="heading-actions"><button class="btn btn-danger" id="approveAllButton" type="button">全部审核</button><button class="btn btn-ghost" id="newButton" type="button">手动登记</button></div></div>
         <div class="approved-tabs" id="approvedTabs" role="tablist" aria-label="已审批稿件视图" hidden>
           <button class="approved-tab active" id="approvedListTab" type="button" role="tab" aria-selected="true" aria-controls="manuscriptListPanel" data-approved-view="list">已审批稿件</button>
           <button class="approved-tab" id="approvedScheduledTab" type="button" role="tab" aria-selected="false" aria-controls="manuscriptListPanel" data-approved-view="scheduled">已安排稿件</button>
@@ -86,9 +87,9 @@
         </div>
         <div class="review-grid" id="manuscriptListPanel">
           <article class="card manuscript-list">
-            <div class="list-filters"><input class="input" id="filterQ" type="search" placeholder="搜索编号、姓名或内容" aria-label="搜索稿件"><select class="select" id="filterStatus" aria-label="筛选已审批状态" hidden><option value="">全部状态</option><option>已通过</option><option>已播出</option><option>已退稿</option></select><button class="text-button" id="resetFilters" type="button">重置</button></div>
+            <div class="list-filters"><input class="input" id="filterQ" type="search" placeholder="搜索歌曲、歌手、姓名或编号" aria-label="搜索稿件"><select class="select" id="filterStatus" aria-label="筛选已审批状态" hidden><option value="">全部状态</option><option>已通过</option><option>已播出</option><option>已退稿</option></select><button class="text-button" id="resetFilters" type="button">重置</button></div>
             <div class="list-toolbar"><label><input id="selectPage" type="checkbox"> 全选本页</label><span id="listCount">正在加载…</span><div class="export-actions"><button class="text-button" data-export="csv" type="button">CSV</button><button class="text-button" data-export="xlsx" type="button">Excel</button></div></div>
-            <div class="table-scroll"><table class="data manuscript-table"><thead><tr><th class="checkbox-cell"></th><th>稿件 / 投稿人</th><th>状态</th></tr></thead><tbody id="manuscriptBody"><tr><td colspan="3" class="empty-state">正在加载稿件…</td></tr></tbody></table></div>
+            <div class="table-scroll"><table class="data manuscript-table"><thead><tr><th class="checkbox-cell"></th><th>点播 / 投稿人</th><th>状态</th></tr></thead><tbody id="manuscriptBody"><tr><td colspan="3" class="empty-state">正在加载稿件…</td></tr></tbody></table></div>
             <div class="pager"><span class="info" id="pagerInfo"></span><div class="btns" id="pagerBtns"></div></div>
           </article>
           <aside class="card operation-panel" aria-labelledby="operationHeading">
@@ -131,7 +132,6 @@
           <article class="card message-composer"><h2>发布新公告</h2><div class="operation-identity"><span>操作账号</span><strong class="operation-account"></strong></div><form id="messageForm" novalidate>
             <div class="field"><label for="messageTitle">标题<span class="req">*</span></label><input class="input" id="messageTitle" maxlength="80" placeholder="输入公告标题"></div>
             <div class="field"><label for="messageContent">公告内容<span class="req">*</span></label><textarea class="textarea" id="messageContent" maxlength="2000" placeholder="写下需要向同学们发布的消息"></textarea></div>
-            <div class="field"><label for="messagePublishAs">发布身份</label><select class="select" id="messagePublishAs"><option value="current_account">以当前账号发布</option><option value="media_center">以新媒体中心发布</option></select></div>
             <div class="publisher-line"><span>发布者</span><strong id="messagePublisher"></strong></div><button class="btn btn-primary btn-block" id="publishMessage" type="submit">发布公告</button>
           </form></article>
           <article class="card message-history"><div class="card-heading"><h2>公告历史</h2><span id="messageCount"></span></div><div id="messageHistory"><p class="empty-state">正在加载…</p></div></article>
@@ -142,7 +142,7 @@
 </div>
 
 <dialog class="workspace-dialog risk-dialog" id="confirmDialog"><form method="dialog"><span class="risk-label" id="confirmLabel">操作确认</span><h2 id="confirmTitle">确认操作</h2><p id="confirmMessage"></p><p class="confirm-actor" id="confirmActor"></p><div class="dialog-actions"><button class="btn btn-ghost" value="cancel">取消</button><button class="btn btn-danger" id="confirmAccept" value="confirm">确认操作</button></div></form></dialog>
-<dialog class="workspace-dialog" id="newDialog"><form id="newForm" novalidate><div class="card-heading"><h2>手动登记稿件</h2><button class="icon-btn" type="button" data-close="newDialog" aria-label="关闭">×</button></div><div class="operation-identity"><span>登记账号</span><strong class="operation-account"></strong></div><div class="row-2"><div class="field"><label for="newAuthor">姓名</label><input class="input" id="newAuthor" maxlength="20"></div><div class="field"><label for="newClass">班级</label><input class="input" id="newClass" maxlength="30"></div></div><div class="field"><label for="newContent">投稿内容（1–100 字）</label><textarea class="textarea" id="newContent" maxlength="100"></textarea></div><div class="field"><label for="newContact">联系方式（选填）</label><input class="input" id="newContact" maxlength="50"></div><button class="btn btn-primary btn-block" id="createManuscript" type="submit">登记稿件</button></form></dialog>
+<dialog class="workspace-dialog" id="newDialog"><form id="newForm" novalidate><div class="card-heading"><h2>手动登记点播</h2><button class="icon-btn" type="button" data-close="newDialog" aria-label="关闭">×</button></div><div class="operation-identity"><span>登记账号</span><strong class="operation-account"></strong></div><div class="row-2"><div class="field"><label for="newAuthor">姓名</label><input class="input" id="newAuthor" maxlength="20"></div><div class="field"><label for="newClass">班级</label><input class="input" id="newClass" maxlength="30"></div></div><div class="row-2"><div class="field"><label for="newSongName">点播歌曲名称<span class="req">*</span></label><input class="input" id="newSongName" maxlength="80" required></div><div class="field"><label for="newArtist">歌手<span class="req">*</span></label><input class="input" id="newArtist" maxlength="80" required></div></div><div class="field"><label for="newMessage">简短寄语<span class="opt">选填</span></label><textarea class="textarea request-textarea" id="newMessage" maxlength="100"></textarea></div><div class="field"><label for="newReason">点播理由<span class="opt">选填</span></label><textarea class="textarea request-textarea" id="newReason" maxlength="300"></textarea></div><div class="field"><label for="newContact">联系方式（选填）</label><input class="input" id="newContact" maxlength="50"></div><button class="btn btn-primary btn-block" id="createManuscript" type="submit">登记稿件</button></form></dialog>
 <dialog class="workspace-dialog" id="settingsDialog"><form id="passwordForm" novalidate><div class="card-heading"><h2>修改当前账号密码</h2><button class="icon-btn" type="button" data-close="settingsDialog" aria-label="关闭">×</button></div><div class="operation-identity"><span>操作账号</span><strong class="operation-account"></strong></div><div class="field"><label for="oldPassword">原密码</label><input class="input" id="oldPassword" type="password" autocomplete="current-password"></div><div class="field"><label for="newPassword">新密码（6–64 位）</label><input class="input" id="newPassword" type="password" autocomplete="new-password"></div><div class="field"><label for="confirmPassword">确认密码</label><input class="input" id="confirmPassword" type="password" autocomplete="new-password"></div><p class="settings-hint">修改后注销当前账号的全部登录会话，项目说明中的默认密码保持不变。</p><button class="btn btn-primary btn-block" id="changePassword" type="submit">保存密码</button></form></dialog>
 <footer class="site-credit" aria-label="网站署名">
   <strong>长春中学新媒体中心</strong>
@@ -153,6 +153,6 @@
   </a>
 </footer>
 <div class="toasts" id="toasts" aria-live="polite"></div>
-<script src="js/log-levels.js"></script>
-<script src="js/admin-workspace.js"></script>
+<script src="js/log-levels.js?v=@assets.version@"></script>
+<script src="js/admin-workspace.js?v=@assets.version@"></script>
 </body></html>

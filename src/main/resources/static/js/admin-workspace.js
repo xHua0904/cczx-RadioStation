@@ -18,10 +18,15 @@
     $("#operationAccount").textContent = username;
     $("#username").value = username; updatePublisher();
   }
-  function updatePublisher() { $("#messagePublisher").textContent = $("#messagePublishAs").value === "media_center" ? "新媒体中心" : state.username; }
+  function updatePublisher() { $("#messagePublisher").textContent = state.username; }
   function operatorMeta(row) {
     return [["审稿人", row.reviewed_by], ["排期人", row.scheduled_by], ["最近操作人", row.updated_by]]
       .filter(([, name]) => name).map(([label, name]) => esc(label) + "：" + esc(name)).join("<br>");
+  }
+  function songHeading(row) { return row.song_name || row.title || "历史投稿"; }
+  function requestNotes(row) {
+    return [["简短寄语", row.message], ["点播理由", row.reason], ["原投稿内容", row.legacy_content]]
+      .filter(([, value]) => value).map(([label, value]) => `<div class="request-note"><span>${esc(label)}</span><p>${esc(value)}</p></div>`).join("");
   }
   const formatTime = value => value && Number.isFinite(Date.parse(value)) ? new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" }).format(new Date(value)) : value || "—";
   function auditMarkup(items) {
@@ -83,7 +88,7 @@
     const cards = [["投稿总数", data.total, "本周新增 " + data.this_week + " 篇"], ["待审批", data.pending, "等待新媒体中心审核"], ["采用稿件", data.adopted, "采用率 " + data.adoption_rate + "%"], ["已播出", data.broadcast, "已完成的校园播出"]];
     $("#statGrid").innerHTML = cards.map(([label, count, note], i) => `<article class="overview-stat ${i === 1 ? "accent" : ""}"><p>${esc(label)}</p><strong>${count}</strong><small>${esc(note)}</small></article>`).join("");
     const weeks = data.weekly || [], max = Math.max(1, ...weeks.map(w => w.count));
-    $("#weeklyChart").innerHTML = weeks.map(w => `<div class="week-bar"><b>${w.count}</b><i style="height:${Math.max(3, Math.round(w.count / max * 125))}px"></i><span>${esc(w.label)}</span></div>`).join("");
+    $("#weeklyChart").innerHTML = weeks.map((w, index) => `<div class="week-bar${index === weeks.length - 1 ? " current" : ""}"><b>${w.count}</b><i style="height:${Math.max(4, Math.round(w.count / max * 180))}px"></i><span>${esc(w.label)}</span></div>`).join("");
     $("#classRank").innerHTML = data.by_class?.length ? data.by_class.map((c, i) => `<div class="rank-row"><span>${i + 1}</span><strong>${esc(c.name)}</strong><b>${c.count} 篇</b></div>`).join("") : '<p class="empty-state">暂无投稿数据</p>';
     updateSelection();
   }
@@ -93,7 +98,7 @@
     $("#serverData").innerHTML = metrics.map(([name, value]) => `<div><dt>${esc(name)}</dt><dd>${esc(value)}</dd></div>`).join(""); $("#serverDot").classList.add("online"); $("#serverLabel").textContent = "服务器运行正常"; $("#serverStatusBadge").className = "badge st-aired"; $("#serverStatusBadge").textContent = "运行中";
   }
   function scheduleMarkup(items) {
-    return items.length ? items.map(row => `<div class="schedule-entry"><time>${esc(row.broadcast_date)} ${esc(row.broadcast_time || "")}</time><div class="schedule-copy"><p>${esc(row.content)}</p><small>${esc(row.author)} · ${esc(row.class_name)}</small></div><span class="badge ${statusClass(row.status)}">${esc(row.status)}</span></div>`).join("") : '<p class="empty-state">暂无播出日程</p>';
+    return items.length ? items.map(row => `<div class="schedule-entry"><time>${esc(row.broadcast_date)} ${esc(row.broadcast_time || "")}</time><div class="schedule-copy"><p>${esc(songHeading(row))}</p><small>${esc(row.artist || row.author)} · ${esc(row.class_name)}</small></div><span class="badge ${statusClass(row.status)}">${esc(row.status)}</span></div>`).join("") : '<p class="empty-state">暂无播出日程</p>';
   }
   async function loadSchedule() {
     const data = await api("/api/admin/schedule"), items = data.items || [];
@@ -115,7 +120,7 @@
     }).join("");
     const items = state.schedule.filter(row => row.broadcast_date === state.calendarDate).sort((a, b) => (a.broadcast_time || "").localeCompare(b.broadcast_time || "") || a.id - b.id);
     $("#calendarDayHeading").textContent = state.calendarDate + " 的稿件"; $("#calendarDayCount").textContent = items.length + " 篇";
-    $("#calendarDayItems").innerHTML = items.length ? items.map(row => `<article class="day-manuscript" data-manuscript-id="${row.id}"><div class="day-manuscript-heading"><time>${esc(row.broadcast_time || "未设置时间")}</time><span class="badge ${statusClass(row.status)}">${esc(row.status)}</span></div><p class="day-manuscript-content">${esc(row.content)}</p><p class="manuscript-meta">${esc(row.author)} · ${esc(row.class_name)}<br>${esc(row.code)}</p><p class="operator-meta">${operatorMeta(row)}</p>${row.note ? `<p class="day-manuscript-note">备注：${esc(row.note)}</p>` : ""}<div class="day-manuscript-actions"><label for="calendarStatus${row.id}">播出状态</label><select class="select" id="calendarStatus${row.id}" data-calendar-status="${row.id}" ${state.busy ? "disabled" : ""}><option value="已通过" ${row.status === "已通过" ? "selected" : ""}>待播出</option><option value="已播出" ${row.status === "已播出" ? "selected" : ""}>已播出</option></select><button type="button" class="text-button" data-calendar-history="${row.id}">操作日志</button><button type="button" class="btn btn-ghost btn-sm" data-save-calendar-status="${row.id}" ${state.busy ? "disabled" : ""}>保存状态</button></div></article>`).join("") : '<p class="empty-state">当天没有安排播出的稿件。</p>';
+    $("#calendarDayItems").innerHTML = items.length ? items.map(row => `<article class="day-manuscript" data-manuscript-id="${row.id}"><div class="day-manuscript-heading"><time>${esc(row.broadcast_time || "未设置时间")}</time><span class="badge ${statusClass(row.status)}">${esc(row.status)}</span></div><h3 class="day-manuscript-content">${esc(songHeading(row))}</h3>${row.artist ? `<p class="song-artist">${esc(row.artist)}</p>` : ""}${requestNotes(row)}<p class="manuscript-meta">${esc(row.author)} · ${esc(row.class_name)}<br>${esc(row.code)}</p><p class="operator-meta">${operatorMeta(row)}</p>${row.note ? `<p class="day-manuscript-note">备注：${esc(row.note)}</p>` : ""}<div class="day-manuscript-actions"><label for="calendarStatus${row.id}">播出状态</label><select class="select" id="calendarStatus${row.id}" data-calendar-status="${row.id}" ${state.busy ? "disabled" : ""}><option value="已通过" ${row.status === "已通过" ? "selected" : ""}>待播出</option><option value="已播出" ${row.status === "已播出" ? "selected" : ""}>已播出</option></select><button type="button" class="text-button" data-calendar-history="${row.id}">操作日志</button><button type="button" class="btn btn-ghost btn-sm" data-save-calendar-status="${row.id}" ${state.busy ? "disabled" : ""}>保存状态</button></div></article>`).join("") : '<p class="empty-state">当天没有安排播出的稿件。</p>';
   }
   function changeCalendarMonth(value) {
     if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(value)) return;
@@ -161,7 +166,7 @@
     renderList(); updateSelection();
   }
   function renderList() {
-    $("#manuscriptBody").innerHTML = state.items.length ? state.items.map(row => `<tr data-id="${row.id}" class="${state.selected.has(row.id) ? "selected" : ""}"><td class="checkbox-cell"><input type="checkbox" data-select="${row.id}" ${state.selected.has(row.id) ? "checked" : ""} aria-label="选择稿件 ${esc(row.code)}"></td><td><p class="manuscript-copy">${esc(row.content)}</p><p class="manuscript-meta">${esc(row.author)} · ${esc(row.class_name)}<br>${esc(row.code)} · ${esc(row.created_at.replace("T", " ").slice(0, 16))}${row.broadcast_date ? `<br>播出：${esc(row.broadcast_date)} ${esc(row.broadcast_time)}` : ""}</p></td><td><span class="badge ${statusClass(row.status)}">${esc(row.status)}</span><p class="operator-meta">${operatorMeta(row)}</p><button type="button" class="text-button manuscript-history-link" data-history="${row.id}">操作日志</button></td></tr>`).join("") : '<tr><td colspan="3" class="empty-state">暂无符合条件的稿件</td></tr>';
+    $("#manuscriptBody").innerHTML = state.items.length ? state.items.map(row => `<tr data-id="${row.id}" class="${state.selected.has(row.id) ? "selected" : ""}"><td class="checkbox-cell"><input type="checkbox" data-select="${row.id}" ${state.selected.has(row.id) ? "checked" : ""} aria-label="选择稿件 ${esc(row.code)}"></td><td><p class="manuscript-copy song-title">${esc(songHeading(row))}</p>${row.artist ? `<p class="song-artist">${esc(row.artist)}</p>` : ""}${row.message ? `<p class="request-snippet">${esc(row.message)}</p>` : ""}<p class="manuscript-meta">${esc(row.author)} · ${esc(row.class_name)}<br>${esc(row.code)} · ${esc(row.created_at.replace("T", " ").slice(0, 16))}${row.broadcast_date ? `<br>播出：${esc(row.broadcast_date)} ${esc(row.broadcast_time)}` : ""}</p></td><td><span class="badge ${statusClass(row.status)}">${esc(row.status)}</span><p class="operator-meta">${operatorMeta(row)}</p><button type="button" class="text-button manuscript-history-link" data-history="${row.id}">操作日志</button></td></tr>`).join("") : '<tr><td colspan="3" class="empty-state">暂无符合条件的稿件</td></tr>';
     $("#listCount").textContent = "共 " + state.total + " 篇"; $("#pagerInfo").textContent = "第 " + state.page + " / " + state.pages + " 页";
     $("#pagerBtns").innerHTML = `<button data-page="prev" ${state.page === 1 ? "disabled" : ""}>上一页</button><button data-page="next" ${state.page >= state.pages ? "disabled" : ""}>下一页</button>`;
     $("#selectPage").disabled = !state.items.length; $("#selectPage").checked = !!state.items.length && state.selected.size === state.items.length; $("#selectPage").indeterminate = !!state.selected.size && state.selected.size < state.items.length;
@@ -169,7 +174,7 @@
   function updateSelection() {
     const selected = state.items.filter(row => state.selected.has(row.id)), single = selected.length === 1, active = selected.length && !state.busy;
     $("#selectionCount").textContent = "已选 " + selected.length + " 篇"; $("#selectionEmpty").hidden = !!selected.length; $("#selectedDetails").hidden = !selected.length;
-    $("#selectedDetails").innerHTML = single ? `<p>${esc(selected[0].content)}</p><small>${esc(selected[0].code)} · ${esc(selected[0].author)}<br>${esc(selected[0].class_name)}<br>联系方式：${esc(selected[0].contact || "未填写")}</small><p class="operator-meta">${operatorMeta(selected[0])}</p>` : selected.map(row => `<p>${esc(row.code)} · ${esc(row.author)}</p>`).join("");
+    $("#selectedDetails").innerHTML = single ? `<h3>${esc(songHeading(selected[0]))}</h3>${selected[0].artist ? `<p class="song-artist">${esc(selected[0].artist)}</p>` : ""}${requestNotes(selected[0])}<small>${esc(selected[0].code)} · ${esc(selected[0].author)}<br>${esc(selected[0].class_name)}<br>联系方式：${esc(selected[0].contact || "未填写")}</small><p class="operator-meta">${operatorMeta(selected[0])}</p>` : selected.map(row => `<p>${esc(songHeading(row))} · ${esc(row.author)}</p>`).join("");
     $("#submissionHistoryPanel").hidden = !single;
     const historyId = single ? selected[0].id : null;
     if (historyId !== state.historyId) {
@@ -203,7 +208,7 @@
       else if (view === "audit") await loadAudit();
       else if (view === "developer") await loadLogs();
       else {
-        $("#manuscriptTitle").textContent = names[view]; $("#manuscriptDescription").textContent = view === "review" ? "未审批稿件按列表展示，选中后在右侧操作。" : "管理已审批稿件，安排播出日程或更新播出状态。";
+        $("#manuscriptTitle").textContent = names[view]; $("#manuscriptDescription").textContent = view === "review" ? "选中稿件，查看点播详情并进行审核。" : "管理已审批稿件，安排播出日程或更新播出状态。";
         $("#approveAllButton").hidden = $("#reviewActions").hidden = view !== "review"; $("#approvedActions").hidden = $("#filterStatus").hidden = view !== "approved";
         approvedView(state.approvedView);
         $("#filterQ").value = $("#filterStatus").value = ""; selectionChanged();
@@ -319,14 +324,13 @@
   $("#newButton").addEventListener("click", () => { $("#newForm").reset(); $("#newDialog").showModal(); });
   $$("[data-close]").forEach(button => button.addEventListener("click", () => $("#" + button.dataset.close).close()));
   $("#newForm").addEventListener("submit", async event => {
-    event.preventDefault(); const content = $("#newContent").value.trim(); if (!content || content.length > 100) return toast("投稿内容必须为 1–100 字。", true);
+    event.preventDefault(); const songName = $("#newSongName").value.trim(), artist = $("#newArtist").value.trim(); if (!songName || !artist) return toast("请填写歌曲名称和歌手", true);
     $("#createManuscript").disabled = true;
-    try { await post("/api/admin/submissions", { author: $("#newAuthor").value.trim(), class_name: $("#newClass").value.trim(), content, contact: $("#newContact").value.trim() }); $("#newDialog").close(); toast("已登记，等待审批"); await showView("review"); } catch (error) { toast(error.message, true); }
+    try { await post("/api/admin/submissions", { author: $("#newAuthor").value.trim(), class_name: $("#newClass").value.trim(), song_name: songName, artist, message: $("#newMessage").value.trim(), reason: $("#newReason").value.trim(), contact: $("#newContact").value.trim() }); $("#newDialog").close(); toast("已登记，等待审批"); await showView("review"); } catch (error) { toast(error.message, true); }
     finally { $("#createManuscript").disabled = false; }
   });
-  $("#messagePublishAs").addEventListener("change", updatePublisher);
   $("#messageForm").addEventListener("submit", async event => {
-    event.preventDefault(); const body = { title: $("#messageTitle").value.trim(), content: $("#messageContent").value.trim(), publish_as: $("#messagePublishAs").value };
+    event.preventDefault(); const body = { title: $("#messageTitle").value.trim(), content: $("#messageContent").value.trim() };
     if (!body.title || !body.content) return toast("请填写消息标题和内容。", true); $("#publishMessage").disabled = true;
     try { await post("/api/admin/announcements", body); $("#messageForm").reset(); updatePublisher(); toast("公告已发布到公告栏"); await loadMessages(); } catch (error) { toast(error.message, true); }
     finally { $("#publishMessage").disabled = false; }

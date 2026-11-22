@@ -6,7 +6,7 @@
   </parent>
   <groupId>com.cczxcsc</groupId><artifactId>cczx-RadioStation</artifactId><version>1.0.0</version>
   <name>cczx-RadioStation</name>
-  <properties><java.version>21</java.version><kotlin.version>2.1.21</kotlin.version><project.build.sourceEncoding>UTF-8</project.build.sourceEncoding></properties>
+  <properties><java.version>21</java.version><kotlin.version>2.1.21</kotlin.version><project.build.sourceEncoding>UTF-8</project.build.sourceEncoding><maven.build.timestamp.format>yyyyMMddHHmmss</maven.build.timestamp.format><assets.version>${maven.build.timestamp}</assets.version></properties>
   <dependencies>
     <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-web</artifactId></dependency>
     <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-jdbc</artifactId></dependency>
@@ -25,6 +25,16 @@
   <build>
     <sourceDirectory>${project.basedir}/src/main/kotlin</sourceDirectory><testSourceDirectory>${project.basedir}/src/test/kotlin</testSourceDirectory>
     <finalName>cczx-RadioStation</finalName>
+    <resources>
+      <resource>
+        <directory>src/main/resources</directory><filtering>true</filtering>
+        <includes><include>static/*.html</include></includes>
+      </resource>
+      <resource>
+        <directory>src/main/resources</directory><filtering>false</filtering>
+        <excludes><exclude>static/*.html</exclude></excludes>
+      </resource>
+    </resources>
     <plugins>
       <plugin><groupId>org.springframework.boot</groupId><artifactId>spring-boot-maven-plugin</artifactId></plugin>
       <plugin>
