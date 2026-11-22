@@ -1,29 +1,37 @@
 package com.cczxcsc
 
+import com.cczxcsc.common.SongRequestContent
+import com.cczxcsc.common.Weeks
+import com.cczxcsc.common.schoolZone
+import com.cczxcsc.dao.SubmissionDao
+import com.cczxcsc.service.AuthService
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
-import org.apache.poi.xssf.usermodel.XSSFWorkbook
-import org.junit.jupiter.api.BeforeEach
-import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.Assertions.*
-import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.web.server.LocalServerPort
 import java.io.ByteArrayInputStream
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
+import java.time.LocalDate
 import java.util.concurrent.Executors
+import org.apache.poi.xssf.usermodel.XSSFWorkbook
+import org.junit.jupiter.api.Assertions.*
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Test
+import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.boot.test.web.server.LocalServerPort
+import org.springframework.jdbc.core.JdbcTemplate
 
 abstract class ApiContract {
     @LocalServerPort private var port: Int = 0
     @Autowired private lateinit var json: ObjectMapper
-    @Autowired private lateinit var repo: SubmissionRepository
+    @Autowired private lateinit var jdbc: JdbcTemplate
+    @Autowired private lateinit var repo: SubmissionDao
     @Autowired private lateinit var auth: AuthService
     private val client = HttpClient.newHttpClient()
     private val song = mapOf("author" to "测试同学", "class_name" to "高一一班", "period" to Weeks.current().key, "content" to "记录校园生活，分享身边的温暖。")
 
-    @BeforeEach fun clear() { repo.jdbc.update("DELETE FROM submissions"); repo.jdbc.update("DELETE FROM counters"); repo.jdbc.update("DELETE FROM sessions"); repo.jdbc.update("DELETE FROM announcements"); repo.jdbc.update("DELETE FROM audit_log"); repo.jdbc.update("DELETE FROM accounts"); auth.addAccount("测试管理员") }
+    @BeforeEach fun clear() { jdbc.update("DELETE FROM submissions"); jdbc.update("DELETE FROM counters"); jdbc.update("DELETE FROM sessions"); jdbc.update("DELETE FROM announcements"); jdbc.update("DELETE FROM audit_log"); jdbc.update("DELETE FROM accounts"); auth.addAccount("测试管理员") }
     private fun request(method: String, path: String, body: Any? = null, token: String? = null): HttpResponse<ByteArray> {
         val builder = HttpRequest.newBuilder(URI("http://127.0.0.1:$port$path")).header("Content-Type", "application/json")
         if (token != null) builder.header("Authorization", "Bearer $token")
@@ -67,9 +75,9 @@ abstract class ApiContract {
         assertEquals(200, request("DELETE", "/api/admin/announcements/$message", token = science).statusCode())
         assertEquals(200, request("DELETE", "/api/admin/submissions/$id", token = network).statusCode())
         val history = data(request("GET", "/api/admin/audit?target_type=submission&target_id=$id", token = network))
-        assertEquals(5, history.path("total").asInt())
-        assertEquals("在线投稿", history.path("items").last().path("action").asText())
-        assertTrue(history.path("items").last().path("username").asText().startsWith("投稿人："))
+        assertEquals(4, history.path("total").asInt())
+        assertEquals("审核通过", history.path("items").last().path("action").asText())
+        assertEquals("网络部", history.path("items").last().path("username").asText())
         assertEquals("删除稿件", history.path("items").first().path("action").asText())
         assertEquals("网络部", history.path("items").first().path("username").asText())
         assertEquals(3, data(request("GET", "/api/admin/audit?target_type=announcement&target_id=$message", token = science)).path("total").asInt())
@@ -128,7 +136,7 @@ abstract class ApiContract {
         val stored = repo.byCode(code)!!
         assertEquals("稻香", stored.title); assertEquals("点歌祝福", stored.category)
         assertEquals(payload["message"], stored.message); assertEquals(payload["reason"], stored.reason); assertEquals("", stored.legacyContent)
-        val raw = repo.jdbc.queryForObject("SELECT content FROM submissions WHERE id=?", String::class.java, stored.id)!!
+        val raw = jdbc.queryForObject("SELECT content FROM submissions WHERE id=?", String::class.java, stored.id)!!
         assertEquals(payload["reason"], SongRequestContent.decode(raw)?.reason)
         val token = login()
         val search = data(request("GET", "/api/admin/submissions?q=" + java.net.URLEncoder.encode("周杰伦", Charsets.UTF_8), token = token))
@@ -168,10 +176,95 @@ abstract class ApiContract {
         val stored = repo.byCode(data(response).path("code").asText())!!
         assertEquals(original, stored.content); assertEquals(original, stored.legacyContent)
         assertEquals("", stored.message); assertEquals("", stored.reason)
-        repo.jdbc.update("UPDATE submissions SET song_name=?,artist=? WHERE id=?", "历史歌曲", "历史歌手", stored.id)
+        jdbc.update("UPDATE submissions SET song_name=?,artist=? WHERE id=?", "历史歌曲", "历史歌手", stored.id)
         assertEquals(original, repo.byId(stored.id)!!.legacyContent)
         assertNull(SongRequestContent.decode(original))
         assertNull(SongRequestContent.decode("""{"_format":"cczx-song-request-v1","message":0,"reason":""}"""))
+    }
+
+    @Test fun `姓名或编号自动查询进度且分页不会泄露私密字段`() {
+        val payload = mapOf("author" to "同名同学", "class_name" to "高一1班", "song_name" to "稻香", "artist" to "周杰伦",
+            "message" to "私密寄语", "reason" to "私密理由", "contact" to "私密联系方式")
+        val codes = (1..12).map { data(request("POST", "/api/submissions", payload)).path("code").asText() }
+        assertEquals(200, request("POST", "/api/submissions", payload + ("author" to "另一同学")).statusCode())
+        val rows = data(request("POST", "/api/submissions/progress", mapOf("query" to " 同名同学 ")))
+        assertEquals("name", rows.path("input_type").asText()); assertEquals(12, rows.path("total").asInt())
+        assertEquals(10, rows.path("items").size()); assertEquals(2, rows.path("pages").asInt())
+        assertEquals(2, data(request("POST", "/api/submissions/progress", mapOf("query" to "同名同学", "page" to 2))).path("items").size())
+        val byCode = data(request("POST", "/api/submissions/progress", mapOf("query" to codes.first().lowercase())))
+        assertEquals("code", byCode.path("input_type").asText()); assertEquals(1, byCode.path("total").asInt())
+        assertEquals(codes.first(), byCode.path("items").first().path("code").asText())
+        val allowed = setOf("code", "class_name", "song_name", "artist", "status", "broadcast_date", "broadcast_time", "created_at")
+        assertEquals(allowed, rows.path("items").first().fieldNames().asSequence().toSet())
+        assertFalse(rows.toString().contains("私密"))
+        assertEquals(0, data(request("POST", "/api/submissions/progress", mapOf("query" to "同名%"))).path("total").asInt())
+        assertEquals(0, data(request("POST", "/api/submissions/progress", mapOf("query" to "' OR 1=1 --"))).path("total").asInt())
+        assertEquals(400, request("POST", "/api/submissions/progress", mapOf("query" to " ")).statusCode())
+    }
+
+    @Test fun `公开播放日程按时间分页且只显示今天以后的已安排稿件`() {
+        val payload = mapOf("author" to "测试同学", "class_name" to "高一1班", "song_name" to "稻香", "artist" to "周杰伦", "message" to "私密寄语", "contact" to "私密联系方式")
+        val today = LocalDate.now(schoolZone)
+        repeat(23) { assertEquals(200, request("POST", "/api/submissions", payload).statusCode()) }
+        val ids = repo.pendingIds(); val token = login()
+        assertEquals(200, request("POST", "/api/admin/submissions/batch", mapOf("ids" to ids.take(22), "action" to "approve"), token).statusCode())
+        assertEquals(200, request("POST", "/api/admin/submissions/batch", mapOf("ids" to ids.take(21), "action" to "schedule", "broadcast_date" to today.toString(), "broadcast_time" to "12:30"), token).statusCode())
+        assertEquals(200, request("PATCH", "/api/admin/submissions/${ids[21]}", mapOf("broadcast_date" to today.minusDays(1).toString()), token).statusCode())
+        assertEquals(200, request("PATCH", "/api/admin/submissions/${ids[0]}", mapOf("broadcast_time" to "08:00", "status" to "已播出"), token).statusCode())
+        val response = data(request("GET", "/api/schedule"))
+        assertEquals(21, response.path("total").asInt()); assertEquals(20, response.path("items").size()); assertEquals(2, response.path("pages").asInt())
+        assertEquals("08:00", response.path("items").first().path("broadcast_time").asText())
+        assertEquals("已播出", response.path("items").first().path("status").asText())
+        assertEquals(1, data(request("GET", "/api/schedule?page=2")).path("items").size())
+        assertEquals(setOf("song_name", "artist", "status", "broadcast_date", "broadcast_time"), response.path("items").first().fieldNames().asSequence().toSet())
+        assertFalse(response.toString().contains("私密"))
+    }
+
+    @Test fun `歌曲提示忽略首尾空格和英文字母大小写且不限制重复投稿`() {
+        val payload = mapOf("author" to "测试同学", "class_name" to "高一1班", "song_name" to "See You Again", "artist" to "测试歌手")
+        assertEquals(200, request("POST", "/api/submissions", payload).statusCode())
+        val name = java.net.URLEncoder.encode(" see you again ", Charsets.UTF_8)
+        val response = data(request("GET", "/api/submissions/song-exists?song_name=$name"))
+        assertEquals(setOf("exists"), response.fieldNames().asSequence().toSet()); assertTrue(response.path("exists").asBoolean())
+        assertFalse(data(request("GET", "/api/submissions/song-exists?song_name=OtherSong")).path("exists").asBoolean())
+        assertEquals(200, request("POST", "/api/submissions", payload).statusCode()); assertEquals(2L, repo.count())
+        assertEquals(400, request("GET", "/api/submissions/song-exists?song_name=").statusCode())
+    }
+
+    @Test fun `操作日志隐藏投稿并按审批安排退回筛选且不删除历史记录`() {
+        repeat(3) { assertEquals(200, request("POST", "/api/submissions", song).statusCode()) }
+        val token = login(); val ids = repo.pendingIds()
+        assertEquals(200, request("POST", "/api/admin/submissions", song, token).statusCode())
+        assertEquals(200, request("POST", "/api/admin/submissions/batch", mapOf("ids" to listOf(ids[0]), "action" to "approve"), token).statusCode())
+        assertEquals(200, request("POST", "/api/admin/submissions/batch", mapOf("ids" to listOf(ids[0]), "action" to "schedule", "broadcast_date" to LocalDate.now(schoolZone).toString()), token).statusCode())
+        assertEquals(200, request("POST", "/api/admin/submissions/batch", mapOf("ids" to listOf(ids[1]), "action" to "reject"), token).statusCode())
+        val history = data(request("GET", "/api/admin/audit?target_type=submission", token = token))
+        assertEquals(3, history.path("total").asInt())
+        assertFalse(history.path("items").any { it.path("action").asText() in setOf("在线投稿", "手动登记") })
+        for ((operation, expected) in listOf("review" to "审核通过", "schedule" to "安排播出日程", "reject" to "退稿")) {
+            val filtered = data(request("GET", "/api/admin/audit?target_type=submission&operation=$operation", token = token))
+            assertEquals(1, filtered.path("total").asInt()); assertEquals(expected, filtered.path("items").first().path("action").asText())
+        }
+        assertEquals(4, jdbc.queryForObject("SELECT COUNT(*) FROM audit_log WHERE action IN ('在线投稿','手动登记')", Int::class.java))
+        assertEquals(400, request("GET", "/api/admin/audit?operation=invalid", token = token).statusCode())
+    }
+
+    @Test fun `进度重复检测日程和日志读取不改变现有数据或数据库结构`() {
+        assertEquals(200, request("POST", "/api/submissions", song).statusCode()); val token = login()
+        val sqlite = jdbc.dataSource!!.connection.use { it.metaData.databaseProductName.equals("SQLite", ignoreCase = true) }
+        fun schema() = if (sqlite) jdbc.queryForList("SELECT name,sql FROM sqlite_master WHERE type IN ('table','index') ORDER BY name")
+            else jdbc.queryForList("SELECT table_name,column_name,data_type,column_default,is_nullable FROM information_schema.columns WHERE table_schema=current_schema() ORDER BY table_name,ordinal_position") +
+                jdbc.queryForList("SELECT tablename,indexname,indexdef FROM pg_indexes WHERE schemaname=current_schema() ORDER BY tablename,indexname")
+        val before = schema()
+        val logs = jdbc.queryForObject("SELECT COUNT(*) FROM audit_log", Long::class.java)
+        val records = jdbc.queryForList("SELECT * FROM submissions")
+        assertEquals(200, request("POST", "/api/submissions/progress", mapOf("query" to "测试同学")).statusCode())
+        assertEquals(200, request("GET", "/api/submissions/song-exists?song_name=test").statusCode())
+        assertEquals(200, request("GET", "/api/schedule").statusCode())
+        assertEquals(200, request("GET", "/api/admin/audit?operation=review", token = token).statusCode())
+        assertEquals(before, schema())
+        assertEquals(logs, jdbc.queryForObject("SELECT COUNT(*) FROM audit_log", Long::class.java))
+        assertEquals(records, jdbc.queryForList("SELECT * FROM submissions"))
     }
 
     @Test fun `并发投稿编号不会重复且不会丢失`() {
@@ -254,8 +347,8 @@ abstract class ApiContract {
         val response = request("POST", "/api/admin/announcements", mapOf("title" to "下一期投稿计划", "content" to "欢迎分享校园见闻", "kind" to "投稿计划", "publisher" to "伪造发布者"), token)
         assertEquals(200, response.statusCode())
         val id = data(response).path("id").asLong()
-        assertEquals("公告", repo.jdbc.queryForObject("SELECT kind FROM announcements WHERE id=?", String::class.java, id))
-        assertEquals("", repo.jdbc.queryForObject("SELECT period FROM announcements WHERE id=?", String::class.java, id))
+        assertEquals("公告", jdbc.queryForObject("SELECT kind FROM announcements WHERE id=?", String::class.java, id))
+        assertEquals("", jdbc.queryForObject("SELECT period FROM announcements WHERE id=?", String::class.java, id))
         val announcement = data(request("GET", "/api/announcements")).path("items").first()
         assertFalse(announcement.has("kind")); assertFalse(announcement.has("period"))
         assertEquals("测试管理员", data(request("GET", "/api/announcements")).path("items").first().path("publisher").asText())
@@ -273,18 +366,18 @@ abstract class ApiContract {
         }
         for (name in listOf("高一0班", "高一12班", "高二10班", "高三1班", "任意班级")) assertEquals(400, request("POST", "/api/submissions", song + ("class_name" to name)).statusCode())
         assertEquals(4L, repo.count())
-        assertEquals("高二9班", repo.jdbc.queryForObject("SELECT class_name FROM submissions ORDER BY id DESC LIMIT 1", String::class.java))
+        assertEquals("高二9班", jdbc.queryForObject("SELECT class_name FROM submissions ORDER BY id DESC LIMIT 1", String::class.java))
     }
     @Test fun `评分接口和导出取消但历史评分不被清空且备注仍可保存`() {
         val created = data(request("POST", "/api/submissions", song))
         val code = created.path("code").asText()
         val id = repo.byCode(code)!!.id
-        repo.jdbc.update("UPDATE submissions SET score=88 WHERE id=?", id)
+        jdbc.update("UPDATE submissions SET score=88 WHERE id=?", id)
         val token = login()
         assertFalse(data(request("GET", "/api/admin/submissions", token = token)).path("items").first().has("score"))
         assertFalse(data(request("GET", "/api/submissions/track?code=$code&author=%E6%B5%8B%E8%AF%95%E5%90%8C%E5%AD%A6")).has("score"))
         assertEquals(400, request("PATCH", "/api/admin/submissions/$id", mapOf("score" to 99, "note" to "不应写入"), token).statusCode())
-        assertEquals(88, repo.jdbc.queryForObject("SELECT score FROM submissions WHERE id=?", Int::class.java, id))
+        assertEquals(88, jdbc.queryForObject("SELECT score FROM submissions WHERE id=?", Int::class.java, id))
         assertEquals(200, request("PATCH", "/api/admin/submissions/$id", mapOf("note" to "保留备注能力"), token).statusCode())
         assertEquals("保留备注能力", repo.byId(id)!!.note)
         val csv = request("GET", "/api/admin/export?format=csv", token = token).body().toString(Charsets.UTF_8)

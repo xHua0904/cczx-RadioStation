@@ -144,6 +144,14 @@ async function main() {
   await click('#submitBtn');
   await waitPage('document.querySelector("#successPanel").classList.contains("show")');
   assert.equal((await api('/api/meta')).total, 1);
+  const publicCode = await cdp.eval('document.querySelector("#submissionCode").textContent');
+  await click('#viewProgressBtn');
+  await waitPage('document.querySelector("#progressHint").textContent.includes("编号查询") && document.querySelector("#progressResults").textContent.includes(' + JSON.stringify(publicCode) + ')');
+  await fill('#progressQuery', '浏览器同学'); await click('#progressSubmit');
+  await waitPage('document.querySelector("#progressHint").textContent.includes("姓名查询") && document.querySelector("#progressResults").textContent.includes("待审核")');
+  await click('#againBtn'); await fill('#song_name', '稻香');
+  await waitPage('!document.querySelector("#songDuplicate").hidden && document.querySelector("#songDuplicate").textContent === "本首歌已有同学提交"');
+  assert.equal(await cdp.eval('document.querySelector("#submitBtn").disabled'), false);
   assert.equal(await cdp.eval('document.querySelector("#class_name").tagName'), 'SELECT');
   assert.equal(await cdp.eval('document.querySelectorAll("#class_name optgroup[label=高一] option").length'), 11);
   assert.equal(await cdp.eval('document.querySelectorAll("#class_name optgroup[label=高二] option").length'), 9);
@@ -154,7 +162,7 @@ async function main() {
   assert.equal(await cdp.eval('document.querySelector(".github-link").href'), 'https://github.com/xHua0904/cczx-RadioStation');
   assert.ok(await cdp.eval('parseFloat(getComputedStyle(document.querySelector(".site-credit strong")).fontSize) > parseFloat(getComputedStyle(document.querySelector(".site-credit p")).fontSize)'));
   await cdp.eval('document.querySelector(".site-credit").scrollIntoView()'); await screenshot('footer-desktop');
-  console.log('PASS 投稿页：四项点播字段、必填和字数校验、点播预览与提交');
+  console.log('PASS 投稿页：点播提交、姓名或编号自动查询、相同歌曲提示且可继续提交');
 
   const token = (await api('/api/admin/login', 'POST', { username: "浏览器测试管理员", password: testPassword })).token;
   const manuscript = { author: '测试同学', class_name: '高一二班', content: '待审批的校园稿件。' };
@@ -268,6 +276,15 @@ async function main() {
   await waitPage('document.querySelectorAll("#manuscriptBody tr[data-id]").length === 3');
   console.log('PASS 播出日历：单篇状态往返切换保留日程、其他稿件不变、数量与排序、跨月跨年与闰年');
 
+  await navigate('/', 'document.querySelector("#publicSchedule").textContent.includes("12:30")');
+  assert.ok(await cdp.eval('document.querySelector("#publicSchedule").textContent.includes("稻香")'));
+  assert.equal(await cdp.eval('document.querySelector("#publicSchedule").textContent.includes("希望在午间广播听到这首歌。")'), false);
+  await fill('#progressQuery', publicCode.toLowerCase()); await click('#progressSubmit');
+  await waitPage('document.querySelector("#progressResults").textContent.includes("2026-12-01") && document.querySelector("#progressHint").textContent.includes("编号查询")');
+  await noOverflow('公开日程与进度'); await screenshot('public-schedule-desktop');
+  await navigate('/admin.html', 'document.querySelector("#dashView") && !document.querySelector("#dashView").hidden');
+  console.log('PASS 公开播放日程：显示已安排歌曲、时间，进度查询显示播出安排且不包含寄语理由');
+
   await click('.nav-item[data-view=messages]');
   await waitPage('!document.querySelector("#messagesPanel").hidden && document.querySelector("#messageCount").textContent === "0 条"');
   assert.equal(await cdp.eval('document.querySelector("#messageKind")'), null);
@@ -320,6 +337,13 @@ async function main() {
   await click('.nav-item[data-view=audit]');
   await waitPage('document.querySelector("#auditHistory").textContent.includes("浏览器测试管理员")');
   assert.ok(await cdp.eval('document.querySelector("#auditCount").textContent.includes("条记录")'));
+  assert.equal(await cdp.eval('document.querySelector("#auditHistory").textContent.includes("在线投稿")'), false);
+  await fill('#auditOperation', 'review');
+  await waitPage('document.querySelectorAll("#auditHistory .audit-entry").length > 0 && [...document.querySelectorAll("#auditHistory .audit-entry > p")].every(node => node.textContent === "审核通过")');
+  await fill('#auditOperation', 'schedule');
+  await waitPage('document.querySelectorAll("#auditHistory .audit-entry").length > 0 && [...document.querySelectorAll("#auditHistory .audit-entry > p")].every(node => ["安排播出日程", "移出日程"].includes(node.textContent))');
+  await noOverflow('操作类型筛选'); await screenshot('audit-filters-mobile');
+  console.log('PASS 操作日志：不显示投稿，按审批和安排筛选，分页和数量来自筛选结果');
   await click('.nav-item[data-view=developer]');
   await waitPage('document.querySelector("#serverLogs").textContent.includes("Started ApplicationKt")');
   await cdp.eval(`window.originalLogFetch = window.fetch;
@@ -344,7 +368,8 @@ async function main() {
   await waitPage('document.querySelectorAll("#manuscriptBody tr[data-id]").length === 3');
   assert.ok(await cdp.eval('document.querySelector("#manuscriptBody").textContent.includes("审稿人：浏览器测试管理员")'));
   await click('[data-history="' + firstId + '"]');
-  await waitPage('document.querySelector("#submissionHistory").textContent.includes("审核通过") && document.querySelector("#submissionHistory").textContent.includes("在线投稿")');
+  await waitPage('document.querySelector("#submissionHistory").textContent.includes("审核通过")');
+  assert.equal(await cdp.eval('document.querySelector("#submissionHistory").textContent.includes("在线投稿")'), false);
   assert.ok(await cdp.eval('document.querySelector("#operationAccount").textContent.includes("网络部")'));
   await screenshot('submission-history-mobile');
   await fill('#operationNote', '评分取消后仍可保存备注'); await click('#saveSelected');

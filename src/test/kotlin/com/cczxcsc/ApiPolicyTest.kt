@@ -1,14 +1,10 @@
 package com.cczxcsc
 
+import com.cczxcsc.common.schoolZone
+import com.cczxcsc.dao.SubmissionDao
+import com.cczxcsc.security.Passwords
+import com.cczxcsc.service.AuthService
 import com.fasterxml.jackson.databind.ObjectMapper
-import org.junit.jupiter.api.Assertions.*
-import org.junit.jupiter.api.BeforeEach
-import org.junit.jupiter.api.Test
-import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.boot.test.web.server.LocalServerPort
-import org.springframework.test.context.DynamicPropertyRegistry
-import org.springframework.test.context.DynamicPropertySource
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
@@ -17,8 +13,17 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
+import org.junit.jupiter.api.Assertions.*
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Test
+import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.boot.test.web.server.LocalServerPort
+import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.test.context.DynamicPropertyRegistry
+import org.springframework.test.context.DynamicPropertySource
 
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = ["app.submissions-per-minute=3", "app.trusted-proxies=127.0.0.1/32"])
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = ["app.submissions-per-minute=3", "app.public-reads-per-minute=3", "app.trusted-proxies=127.0.0.1/32"])
 class ApiPolicyTest {
     companion object {
         private val directory = Files.createDirectories(Path.of("target/test-data", UUID.randomUUID().toString())).toAbsolutePath()
@@ -31,12 +36,13 @@ class ApiPolicyTest {
     @LocalServerPort private var port = 0
     @Autowired private lateinit var json: ObjectMapper
     @Autowired private lateinit var auth: AuthService
-    @Autowired private lateinit var repo: SubmissionRepository
+    @Autowired private lateinit var jdbc: JdbcTemplate
+    @Autowired private lateinit var repo: SubmissionDao
     private val client = HttpClient.newHttpClient()
     private var source = ""
     private val song = mapOf("author" to "测试同学", "class_name" to "高一一班", "content" to "投稿限流测试。")
     @BeforeEach fun clear() {
-        for (table in listOf("sessions", "submissions", "announcements", "audit_log", "accounts")) repo.jdbc.update("DELETE FROM $table")
+        for (table in listOf("sessions", "submissions", "announcements", "audit_log", "accounts")) jdbc.update("DELETE FROM $table")
         auth.addAccount("网络部"); auth.addAccount("科创社")
         source = "192.0.2.${sources.incrementAndGet()}"
     }
@@ -59,16 +65,27 @@ class ApiPolicyTest {
         assertEquals(200, request("POST", "/api/submissions", song, ip = "198.51.100.90").statusCode())
         assertEquals(200, request("POST", "/api/admin/submissions", song, login("网络部")).statusCode())
     }
+    @Test fun `公开查询单独限流且不会消耗投稿额度`() {
+        assertEquals(200, request("GET", "/api/schedule").statusCode())
+        assertEquals(200, request("GET", "/api/submissions/song-exists?song_name=test").statusCode())
+        assertEquals(200, request("POST", "/api/submissions/progress", mapOf("query" to "测试同学")).statusCode())
+        val rejected = request("GET", "/api/schedule")
+        assertEquals(429, rejected.statusCode()); assertTrue(rejected.headers().firstValue("Retry-After").isPresent)
+        assertEquals(200, request("GET", "/api/schedule", ip = "198.51.100.9").statusCode())
+        repeat(3) { assertEquals(200, request("POST", "/api/submissions", song).statusCode()) }
+        assertEquals(3L, repo.count())
+    }
+
     @Test fun `所有账号和旧编辑字段均具有全部管理权限`() {
-        if (repo.jdbc.queryForList("PRAGMA table_info(accounts)").none { it["name"] == "role" }) repo.jdbc.execute("ALTER TABLE accounts ADD COLUMN role TEXT NOT NULL DEFAULT 'editor'")
-        repo.jdbc.update("UPDATE accounts SET role='editor'")
+        if (jdbc.queryForList("PRAGMA table_info(accounts)").none { it["name"] == "role" }) jdbc.execute("ALTER TABLE accounts ADD COLUMN role TEXT NOT NULL DEFAULT 'editor'")
+        jdbc.update("UPDATE accounts SET role='editor'")
         val tokens = listOf(login("网络部"), login("科创社"))
         for (token in tokens) {
             for (path in listOf("/api/admin/server", "/api/admin/audit", "/api/admin/logs?lines=100", "/api/admin/export?format=csv", "/api/admin/export?format=xlsx")) assertEquals(200, request("GET", path, token = token).statusCode())
             assertEquals("admin", json.readTree(request("GET", "/api/admin/me", token = token).body()).path("role").asText())
         }
         val item = request("POST", "/api/admin/submissions", song, tokens[0]); assertEquals(200, item.statusCode())
-        val id = repo.jdbc.queryForObject("SELECT id FROM submissions LIMIT 1", Long::class.java)!!
+        val id = jdbc.queryForObject("SELECT id FROM submissions LIMIT 1", Long::class.java)!!
         assertEquals(200, request("PATCH", "/api/admin/submissions/$id", mapOf("status" to "已通过"), tokens[1]).statusCode())
         assertEquals(200, request("DELETE", "/api/admin/submissions/$id", token = tokens[1]).statusCode())
     }
@@ -80,9 +97,9 @@ class ApiPolicyTest {
             val id = json.readTree(response.body()).path("id").asLong()
             val item = json.readTree(request("GET", "/api/announcements").body()).path("items").first()
             assertEquals("网络部", item.path("publisher").asText()); assertEquals("网络部", item.path("updated_by").asText())
-            assertEquals("网络部", repo.jdbc.queryForObject("SELECT username FROM audit_log WHERE target_id=? AND action='发布公告'", String::class.java, id.toString()))
+            assertEquals("网络部", jdbc.queryForObject("SELECT username FROM audit_log WHERE target_id=? AND action='发布公告'", String::class.java, id.toString()))
         }
-        assertEquals(0, repo.jdbc.queryForObject("SELECT COUNT(*) FROM accounts WHERE username='新媒体中心'", Int::class.java))
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM accounts WHERE username='新媒体中心'", Int::class.java))
         val second = login("科创社")
         assertEquals(200, request("POST", "/api/admin/announcements", mapOf("title" to "另一账号公告", "content" to "正文"), second).statusCode())
         assertEquals("科创社", json.readTree(request("GET", "/api/announcements").body()).path("items").first().path("publisher").asText())
@@ -112,6 +129,6 @@ class ApiPolicyTest {
         assertEquals(400, request("GET", "/api/admin/audit?start_date=2026-12-31&end_date=2026-01-01", token = token).statusCode())
         assertEquals(400, request("GET", "/api/admin/audit?start_date=bad-date", token = token).statusCode())
         assertEquals(200, request("POST", "/api/admin/logout", emptyMap<String, String>(), token).statusCode())
-        assertEquals(1, repo.jdbc.queryForObject("SELECT COUNT(*) FROM audit_log WHERE username=? AND action='退出后台'", Int::class.java, "网络部"))
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM audit_log WHERE username=? AND action='退出后台'", Int::class.java, "网络部"))
     }
 }

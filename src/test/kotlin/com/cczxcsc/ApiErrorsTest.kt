@@ -1,10 +1,11 @@
 package com.cczxcsc
 
+import com.cczxcsc.controller.ApiErrors
+import java.io.IOException
 import org.apache.catalina.connector.ClientAbortException
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import org.springframework.mock.web.MockHttpServletResponse
-import java.io.IOException
 
 class ApiErrorsTest {
     @Test fun `图片下载断连后不再写JSON响应`() {

@@ -44,6 +44,7 @@ button, input, select, textarea { font: inherit; }
 .public-main .page-head p { color: var(--ink-2); font-size: 16px; line-height: 24px; }
 .page-marker { font-size: 12px; color: var(--muted); border-left: 2px solid var(--brand); padding-left: 12px; white-space: nowrap; }
 .public-layout { grid-template-columns: minmax(0, 1.55fr) minmax(300px, 1fr); gap: 24px; }
+.public-shortcuts { display: flex; flex-wrap: wrap; gap: 16px; margin: -12px 0 24px; }
 .form-card { padding: 28px; box-shadow: var(--glass-shadow); }
 .form-title { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-bottom: 20px; margin-bottom: 24px; border-bottom: 1px solid var(--line); }
 .form-title .form-heading { margin: 0; font-size: 20px; }
@@ -62,6 +63,23 @@ button, input, select, textarea { font: inherit; }
 .submit-row .btn { min-height: 44px; padding-inline: 24px; }
 .form-tip { color: var(--muted); font-size: 12px; }
 .request-preview { display: flex; align-items: center; gap: 20px; padding: 24px; margin-bottom: 32px; }
+.public-progress, .public-schedule { padding: 24px; margin-bottom: 24px; }
+.public-progress label { display: block; font-size: 13px; margin-bottom: 8px; }
+.public-query-row { display: flex; gap: 8px; }
+.public-query-row .input { flex: 1; min-width: 0; }
+.public-query-row .btn { flex: none; }
+.public-hint, .public-result-meta { font-size: 12px; color: var(--muted); line-height: 20px; margin-top: 12px; overflow-wrap: anywhere; }
+.public-result-item { padding: 16px 0; border-top: 1px solid var(--line); }
+.public-result-list { margin-top: 16px; }
+.public-result-heading { display: flex; align-items: start; justify-content: space-between; gap: 12px; }
+.public-song-title { font-size: 17px; line-height: 24px; overflow-wrap: anywhere; min-width: 0; }
+.public-result-heading .badge { flex: none; white-space: nowrap; }
+.public-result-time { color: var(--ink-2); font-size: 13px; line-height: 20px; margin-top: 8px; }
+.public-empty { font-size: 13px; color: var(--muted); line-height: 22px; padding: 16px 0 0; }
+.public-pager { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 12px; color: var(--muted); margin-top: 12px; }
+.public-pager[hidden] { display: none; }
+.song-duplicate { margin-top: 8px; padding: 8px 12px; border-radius: 8px; background: #fff4d5; color: #755511; font-size: 12px; line-height: 20px; }
+.audit-filters { grid-template-columns: minmax(180px, 1.4fr) repeat(4, minmax(130px, 1fr)) auto; }
 .record-disc { width: 80px; height: 80px; flex: 0 0 80px; border-radius: 50%; display: grid; place-items: center; position: relative; background: repeating-radial-gradient(circle, #25292e 0 3px, #32373d 3px 4px); border: 1px solid #171b20; box-shadow: 0 4px 12px rgba(0,0,0,.12); }
 .record-disc span { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: var(--brand); color: #fff; font-size: 10px; }
 .record-disc::after { content: ''; position: absolute; width: 4px; height: 4px; border-radius: 50%; background: #edeef0; }
@@ -142,7 +160,7 @@ button, input, select, textarea { font: inherit; }
 .credits-card { padding: 24px; }
 .credits-main h1 { font-weight: 500; }
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) { .card, .overview-stat, .announcement-card, .login-card { background: #f7f8fa; } }
-@media (max-width: 1180px) { .workarea { padding: 24px; } .review-grid { grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; } .operation-panel { padding: 20px; } }
+@media (max-width: 1180px) { .workarea { padding: 24px; } .review-grid { grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; } .operation-panel { padding: 20px; } .audit-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } .audit-filter-actions { grid-column: 1 / -1; } }
 @media (max-width: 980px) { .sidebar { width: 200px; } .workspace-main, .page-admin:has(#dashView:not([hidden])) > .site-credit { margin-left: 200px; } .review-grid { grid-template-columns: 1fr; } }
 @media (max-width: 760px) {
   .public-main, .site-credit { width: calc(100% - 32px); }
@@ -160,6 +178,8 @@ button, input, select, textarea { font: inherit; }
   .submit-row { flex-direction: column; align-items: stretch; }
   .submit-row .btn { width: 100%; }
   .request-preview { padding: 20px; }
+  .public-progress, .public-schedule { padding: 20px; }
+  .audit-filters { grid-template-columns: 1fr; }
   .announcement-card { padding: 20px; }
   .sidebar { width: 100%; padding: 20px 16px 16px; }
   .sidebar-nav { gap: 4px; }

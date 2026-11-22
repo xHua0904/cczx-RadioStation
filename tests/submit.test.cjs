@@ -7,7 +7,7 @@ const root = path.resolve(__dirname, "..");
 const html = fs.readFileSync(path.join(root, "src/main/resources/static/index.html"), "utf8");
 const source = fs.readFileSync(path.join(root, "src/main/resources/static/js/submit.js"), "utf8");
 
-async function page(messages = []) {
+async function page(messages = [], fixtures = {}) {
   const elements = new Map();
   function element(tag = "div") {
     const classes = new Set();
@@ -15,7 +15,7 @@ async function page(messages = []) {
       tagName: tag.toUpperCase(), value: "", textContent: "", hidden: false, disabled: false, style: {}, handlers: {}, children: [],
       classList: { add: x => classes.add(x), remove: x => classes.delete(x), contains: x => classes.has(x), toggle: (x, yes) => yes ? classes.add(x) : classes.delete(x) },
       addEventListener(name, callback) { (this.handlers[name] ||= []).push(callback); },
-      focus() {}, remove() { if (this.parent) this.parent.children = this.parent.children.filter(x => x !== this); },
+      focus() {}, scrollIntoView() {}, remove() { if (this.parent) this.parent.children = this.parent.children.filter(x => x !== this); },
       appendChild(child) { child.parent = this; this.children.push(child); },
       append(...children) { children.forEach(child => this.appendChild(child)); },
       replaceChildren(...children) { this.children = []; this.append(...children); },
@@ -35,10 +35,13 @@ async function page(messages = []) {
     createElement: element
   };
   vm.runInNewContext(source, {
-    document, location: { protocol: "http:" },
+    document, location: { protocol: "http:" }, URLSearchParams, setTimeout, clearTimeout,
     fetch: async (url, options) => {
       requests.push({ url, options, body: options.body ? JSON.parse(options.body) : null });
       if (url === "/api/announcements") return { ok: true, json: async () => ({ items: messages }) };
+      if (url.startsWith("/api/schedule?")) return { ok: true, json: async () => fixtures.schedule || ({ items: [], total: 0, page: 1, pages: 1 }) };
+      if (url.startsWith("/api/submissions/song-exists?")) return { ok: true, json: async () => ({ exists: typeof fixtures.songExists === "function" ? await fixtures.songExists(url) : !!fixtures.songExists }) };
+      if (url === "/api/submissions/progress") return { ok: true, json: async () => typeof fixtures.progress === "function" ? fixtures.progress(JSON.parse(options.body)) : fixtures.progress || ({ items: [], total: 0, page: 1, pages: 1, input_type: "name" }) };
       const response = responses.shift(); assert.ok(response, "没有准备接口响应");
       return { ok: response.ok !== false, status: response.status || 200, json: async () => response.body };
     }
@@ -73,6 +76,51 @@ test("提交完整点播后显示编号，再次点播重置字段与预览", as
   assert.equal(p.elements.get("#previewSong").textContent, "歌曲名称"); assert.equal(p.elements.get("#previewArtist").textContent, "歌手");
   assert.equal(p.elements.get("#messageCounter").textContent, "0 / 100"); assert.equal(p.elements.get("#reasonCounter").textContent, "0 / 300");
   assert.equal(Object.hasOwn(p.form.elements, "period"), false); assert.equal(p.form.hidden, false);
+});
+
+const contents = node => [node.textContent, ...node.children.map(contents)].join(" ");
+
+test("相同歌曲提示不阻止投稿，重新点播会清除提示", async () => {
+  const p = await page([], { songExists: true }); fill(p);
+  await p.form.elements.song_name.fire("blur");
+  assert.equal(p.elements.get("#songDuplicate").textContent, "本首歌已有同学提交");
+  assert.equal(p.elements.get("#songDuplicate").hidden, false);
+  p.responses.push({ body: { ok: true, code: "GB261115003" } }); await p.form.fire("submit");
+  assert.equal(p.requests.filter(r => r.url === "/api/submissions").length, 1);
+  await p.elements.get("#againBtn").fire("click"); assert.equal(p.elements.get("#songDuplicate").hidden, true);
+});
+
+test("输入改变后不会使用旧歌曲检查结果", async () => {
+  let resolveOld;
+  const p = await page([], { songExists: url => new URLSearchParams(url.split("?")[1]).get("song_name") === "旧歌曲" ? new Promise(resolve => { resolveOld = resolve; }) : false });
+  fill(p); p.form.elements.song_name.value = "旧歌曲";
+  const pending = p.form.elements.song_name.fire("blur"); await new Promise(resolve => setImmediate(resolve));
+  p.form.elements.song_name.value = "新歌曲"; await p.form.elements.song_name.fire("input"); await p.form.elements.song_name.fire("blur");
+  resolveOld(true); await pending;
+  assert.equal(p.elements.get("#songDuplicate").hidden, true);
+});
+
+test("一个输入框查询姓名或编号，支持翻页且内容作为文本显示", async () => {
+  const p = await page([], { progress: ({ query, page }) => ({ input_type: query.startsWith("GB") ? "code" : "name", page, pages: 2, total: 11,
+    items: [{ code: page === 1 ? "GB261115001" : "GB261115002", class_name: "高一1班", song_name: "<img src=x onerror=alert(1)>", artist: "测试歌手", status: "已通过", broadcast_date: "2026-11-22", broadcast_time: "12:30", created_at: "2026-11-21T18:00:00+08:00" }] }) });
+  p.elements.get("#progressQuery").value = "测试同学"; await p.elements.get("#progressForm").fire("submit");
+  assert.equal(p.elements.get("#progressHint").textContent, "姓名查询 · 共 11 篇稿件");
+  assert.ok(contents(p.elements.get("#progressResults")).includes("GB261115001"));
+  assert.equal(p.elements.get("#progressResults").children[0].children[0].children[0].textContent, "<img src=x onerror=alert(1)>");
+  await p.elements.get("#progressNext").fire("click");
+  assert.ok(contents(p.elements.get("#progressResults")).includes("GB261115002"));
+  assert.equal(p.requests.filter(r => r.url === "/api/submissions/progress").at(-1).body.page, 2);
+  p.elements.get("#submissionCode").textContent = "GB261115001"; await p.elements.get("#viewProgressBtn").fire("click");
+  assert.equal(p.elements.get("#progressHint").textContent, "编号查询 · 共 11 篇稿件");
+});
+
+test("投稿页自动加载播放日程并显示歌曲歌手时间和播出状态", async () => {
+  const p = await page([], { schedule: { items: [{ song_name: "稻香", artist: "周杰伦", status: "已通过", broadcast_date: "2026-11-22", broadcast_time: "12:30" }], page: 1, pages: 1, total: 1 } });
+  const text = contents(p.elements.get("#publicSchedule"));
+  for (const value of ["稻香", "周杰伦", "12:30", "待播出"]) assert.ok(text.includes(value));
+  assert.equal(p.elements.get("#refreshPublicSchedule").disabled, false);
+  await p.elements.get("#refreshPublicSchedule").fire("click");
+  assert.equal(p.requests.filter(r => r.url.startsWith("/api/schedule?")).length, 2);
 });
 
 test("歌名与歌手必填且最长八十字，选填内容不能超过限制", async () => {

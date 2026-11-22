@@ -1,15 +1,25 @@
 package com.cczxcsc
 
+import com.cczxcsc.dao.AccountDao
+import com.cczxcsc.dao.AuditDao
+import com.cczxcsc.dao.DatabaseInitializer
+import com.cczxcsc.dao.LegacyImportDao
+import com.cczxcsc.dao.SubmissionDao
+import com.cczxcsc.security.PasswordVault
+import com.cczxcsc.security.Passwords
+import com.cczxcsc.service.AuditService
+import com.cczxcsc.service.AuthService
+import com.cczxcsc.service.LegacyImportService
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
+import java.nio.file.Files
+import java.nio.file.Path
+import java.util.UUID
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.jdbc.datasource.DataSourceTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
 import org.sqlite.SQLiteDataSource
-import java.nio.file.Files
-import java.nio.file.Path
-import java.util.UUID
 
 class LegacyImportTest {
     @Test fun `导入保留编号密码并恢复当天计数`() {
@@ -18,7 +28,7 @@ class LegacyImportTest {
         val jdbc = JdbcTemplate(source)
         val transactions = TransactionTemplate(DataSourceTransactionManager(source))
         DatabaseInitializer(jdbc, transactions, directory.toString()).afterPropertiesSet()
-        val repo = SubmissionRepository(jdbc)
+        val repo = SubmissionDao(jdbc)
         val json = jacksonObjectMapper()
         val hash = Passwords.hash("旧密码Test123")
         val payload = mapOf("format" to "radio-submissions-legacy-v1", "submissions" to listOf(mapOf(
@@ -28,9 +38,9 @@ class LegacyImportTest {
             "settings" to listOf(mapOf("key" to "admin_hash", "value" to hash)), "counters" to emptyList<Any>())
         val file = directory.resolve("legacy.json")
         Files.writeString(file, json.writeValueAsString(payload))
-        val auth = AuthService(jdbc, transactions, PasswordVault(directory.toString()), AuditService(jdbc))
+        val auth = AuthService(AccountDao(jdbc), transactions, PasswordVault(directory.toString()), AuditService(AuditDao(jdbc)))
         auth.addAccount("迁移管理员"); auth.changePassword("cczx123456", "旧密码Test123", "迁移管理员")
-        val importer = LegacyImportService(repo, json, auth, "sqlite")
+        val importer = LegacyImportService(repo, json, LegacyImportDao(jdbc, "sqlite"))
         transactions.executeWithoutResult { importer.importFile(file) }
         assertEquals("保留旧稿件内容", repo.byId(42)?.content)
         assertEquals("GB261115043", transactions.execute { repo.nextCode("2026-11-15") })

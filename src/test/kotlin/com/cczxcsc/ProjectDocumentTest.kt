@@ -1,14 +1,23 @@
 package com.cczxcsc
 
+import com.cczxcsc.common.ApiError
+import com.cczxcsc.common.nowIso
+import com.cczxcsc.dao.AccountDao
+import com.cczxcsc.dao.AuditDao
+import com.cczxcsc.dao.DatabaseInitializer
+import com.cczxcsc.security.PasswordVault
+import com.cczxcsc.security.Passwords
+import com.cczxcsc.service.AuditService
+import com.cczxcsc.service.AuthService
+import java.nio.file.Files
+import java.nio.file.Path
+import java.util.UUID
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.jdbc.datasource.DataSourceTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
 import org.sqlite.SQLiteDataSource
-import java.nio.file.Files
-import java.nio.file.Path
-import java.util.UUID
 
 class ProjectDocumentTest {
     private fun fixture(): Triple<Path, JdbcTemplate, AuthService> {
@@ -16,11 +25,11 @@ class ProjectDocumentTest {
         val source = SQLiteDataSource().apply { url = "jdbc:sqlite:${root.resolve("test.db")}" }
         val jdbc = JdbcTemplate(source); val tx = TransactionTemplate(DataSourceTransactionManager(source))
         DatabaseInitializer(jdbc, tx, root.toString()).afterPropertiesSet()
-        return Triple(root, jdbc, AuthService(jdbc, tx, PasswordVault(root.toString()), AuditService(jdbc)))
+        return Triple(root, jdbc, AuthService(AccountDao(jdbc), tx, PasswordVault(root.toString()), AuditService(AuditDao(jdbc))))
     }
     @Test fun `新数据库没有默认账户也不会从旧共用密码自动创建账户`() {
         val (_, jdbc, auth) = fixture()
-        auth.setSetting("admin_hash", Passwords.hash("旧密码Test123"))
+        jdbc.update("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", "admin_hash", Passwords.hash("旧密码Test123"))
         assertTrue(auth.listAccounts().isEmpty())
         assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM accounts", Int::class.java))
         assertThrows(ApiError::class.java) { auth.login("cczx123456", "local", "新媒体中心") }

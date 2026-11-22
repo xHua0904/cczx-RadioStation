@@ -1,21 +1,27 @@
 package com.cczxcsc
 
+import com.cczxcsc.service.AuditService
+import com.cczxcsc.service.AuthService
+import com.cczxcsc.service.DemoService
+import com.cczxcsc.service.LegacyImportService
+import java.io.PrintStream
+import java.nio.file.Files
+import java.nio.file.Path
 import org.springframework.boot.ApplicationArguments
 import org.springframework.boot.ApplicationRunner
 import org.springframework.boot.autoconfigure.SpringBootApplication
 import org.springframework.boot.runApplication
 import org.springframework.context.annotation.Bean
 import org.springframework.core.annotation.Order
-import java.io.PrintStream
-import java.nio.file.Files
-import java.nio.file.Path
+
+private val managementOptions = setOf("import-legacy", "reset-password", "show-password", "demo-data", "add-account", "delete-account", "list-accounts")
 
 @SpringBootApplication
 class Application {
     @Bean
     @Order(1)
     fun startup(auth: AuthService, imports: LegacyImportService, demo: DemoService, audit: AuditService) = ApplicationRunner { args: ApplicationArguments ->
-        require(listOf("import-legacy", "reset-password", "show-password", "demo-data", "add-account", "delete-account", "list-accounts").count(args::containsOption) <= 1) { "一次只能指定一个管理命令" }
+        require(managementOptions.count(args::containsOption) <= 1) { "一次只能指定一个管理命令" }
         require(!args.containsOption("account") || args.containsOption("show-password") || args.containsOption("reset-password")) { "--account 仅用于查询或重置密码" }
         fun value(option: String): String = args.getOptionValues(option)?.singleOrNull()?.takeIf { it.isNotBlank() }
             ?: throw IllegalArgumentException("--$option 需要指定一个非空值")
@@ -23,7 +29,7 @@ class Application {
         require(!(args.containsOption("show-password") || args.containsOption("reset-password")) || username.isNotEmpty()) { "没有默认账号，请使用 --account=账号 指定目标账号" }
         when {
             args.containsOption("import-legacy") -> {
-                imports.importFile(Path.of(args.getOptionValues("import-legacy").first()))
+                imports.importFile(Path.of(value("import-legacy")))
                 audit.record(AuditService.commandActor, "导入旧稿件", "import", "legacy", "旧投稿数据导入")
             }
             args.containsOption("reset-password") -> auth.resetPassword(username)
@@ -59,7 +65,7 @@ fun main(args: Array<String>) {
     }
     // 连接 SQLite 前先创建目录，避免首次启动时连接池找不到文件。
     Files.createDirectories(Path.of(System.getenv("DATA_DIR") ?: "./data"))
-    val command = args.any { it.substringBefore('=') in setOf("--import-legacy", "--reset-password", "--show-password", "--demo-data", "--add-account", "--delete-account", "--list-accounts") }
+    val command = args.any { it.substringBefore('=') in managementOptions.map { option -> "--$option" } }
     var launchArgs = if (command) args.filterNot { it.substringBefore('=') == "--spring.main.web-application-type" }.toTypedArray() + "--spring.main.web-application-type=none" else args
     if (args.any { it.substringBefore('=') == "--show-password" }) {
         if (args.none { it.substringBefore('=') == "--spring.main.banner-mode" }) launchArgs += "--spring.main.banner-mode=off"

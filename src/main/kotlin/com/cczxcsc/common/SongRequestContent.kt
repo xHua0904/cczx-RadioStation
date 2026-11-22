@@ -1,8 +1,7 @@
-package com.cczxcsc
+package com.cczxcsc.common
 
+import com.cczxcsc.model.SongRequestNotes
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
-
-data class SongRequestNotes(val message: String, val reason: String)
 
 // 复用已有正文列保存两项独立信息，带版本标记；旧正文保持原样，不需要数据库迁移。
 object SongRequestContent {

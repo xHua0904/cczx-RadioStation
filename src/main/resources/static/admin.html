@@ -52,11 +52,12 @@
       </section>
 
       <section id="auditPanel" class="module-panel" hidden>
-        <div class="section-heading"><div><span class="eyebrow">操作留痕</span><h1>操作日志</h1><p>查看稿件从投稿到播出的操作账号、时间和历史，也可查阅公告及账号操作。</p></div><button class="btn btn-ghost" id="refreshAudit" type="button">刷新日志</button></div>
+        <div class="section-heading"><div><span class="eyebrow">操作留痕</span><h1>操作日志</h1><p>按审批、安排、退回等类型查看操作账号、时间和历史，投稿事件不在这里显示。</p></div><button class="btn btn-ghost" id="refreshAudit" type="button">刷新日志</button></div>
         <article class="card audit-card">
           <form id="auditFilters" class="audit-filters">
             <div class="field"><label for="auditQuery">搜索操作人 / 编号</label><input class="input" id="auditQuery" type="search" maxlength="100" placeholder="账号、稿件编号或操作名称"></div>
             <div class="field"><label for="auditType">操作对象</label><select class="select" id="auditType"><option value="submission">稿件</option><option value="">全部对象</option><option value="announcement">公告</option><option value="account">账号</option><option value="export">导出</option><option value="import">数据导入</option></select></div>
+            <div class="field"><label for="auditOperation">操作类型</label><select class="select" id="auditOperation"><option value="">全部操作</option><option value="review">审批</option><option value="schedule">安排 / 移出日程</option><option value="reject">退回</option><option value="reopen">重新审批</option><option value="played">播出状态</option><option value="note">修改备注</option><option value="delete">删除稿件</option><option value="announcement">公告操作</option><option value="account">账号操作</option><option value="export">导出稿件</option><option value="import">导入稿件</option></select></div>
             <div class="field"><label for="auditStart">开始日期</label><input class="input" id="auditStart" type="date"></div>
             <div class="field"><label for="auditEnd">结束日期</label><input class="input" id="auditEnd" type="date"></div>
             <div class="audit-filter-actions"><button class="btn btn-primary" type="submit">查询</button><button class="text-button" id="resetAudit" type="button">重置</button></div>

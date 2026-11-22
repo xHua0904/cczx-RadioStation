@@ -34,7 +34,7 @@
   }
   async function loadAudit() {
     const requestId = state.auditRequestId = (state.auditRequestId || 0) + 1;
-    const params = new URLSearchParams({ page: String(state.auditPage || 1), target_type: $("#auditType").value, q: $("#auditQuery").value.trim(), start_date: $("#auditStart").value, end_date: $("#auditEnd").value });
+    const params = new URLSearchParams({ page: String(state.auditPage || 1), target_type: $("#auditType").value, operation: $("#auditOperation").value, q: $("#auditQuery").value.trim(), start_date: $("#auditStart").value, end_date: $("#auditEnd").value });
     const data = await api("/api/admin/audit?" + params);
     if (requestId !== state.auditRequestId) return;
     if (data.page > data.pages) { state.auditPage = data.pages; return loadAudit(); }
@@ -290,7 +290,7 @@
   });
   $$("[data-view]").forEach(button => button.addEventListener("click", () => showView(button.dataset.view)));
   $$("[data-approved-view]").forEach(button => button.addEventListener("click", () => switchApprovedView(button.dataset.approvedView)));
-  $("#calendarDayItems").addEventListener("click", event => { const history = event.target.closest("[data-calendar-history]"); if (history) { const row = state.schedule.find(item => item.id === Number(history.dataset.calendarHistory)); if (row) { $("#auditType").value = "submission"; $("#auditQuery").value = row.code; $("#auditStart").value = $("#auditEnd").value = ""; state.auditPage = 1; showView("audit"); } return; } const button = event.target.closest("[data-save-calendar-status]"); if (button && !button.disabled) saveCalendarStatus(Number(button.dataset.saveCalendarStatus)); });
+  $("#calendarDayItems").addEventListener("click", event => { const history = event.target.closest("[data-calendar-history]"); if (history) { const row = state.schedule.find(item => item.id === Number(history.dataset.calendarHistory)); if (row) { $("#auditType").value = "submission"; $("#auditOperation").value = ""; $("#auditQuery").value = row.code; $("#auditStart").value = $("#auditEnd").value = ""; state.auditPage = 1; showView("audit"); } return; } const button = event.target.closest("[data-save-calendar-status]"); if (button && !button.disabled) saveCalendarStatus(Number(button.dataset.saveCalendarStatus)); });
   $("#openBroadcastCalendar").addEventListener("click", () => { state.approvedView = "calendar"; showView("approved"); });
   $("#calendarDays").addEventListener("click", event => { const button = event.target.closest("[data-calendar-date]"); if (button) { state.calendarDate = button.dataset.calendarDate; state.calendarMonth = state.calendarDate.slice(0, 7); renderCalendar(); } });
   $("#calendarMonth").addEventListener("change", event => { changeCalendarMonth(event.target.value); });
@@ -298,6 +298,7 @@
   $("#calendarToday").addEventListener("click", () => { state.calendarDate = todayKey(); state.calendarMonth = state.calendarDate.slice(0, 7); renderCalendar(); });
   $("#refreshDashboard").addEventListener("click", () => { showError(""); loadDashboard(); });
   $("#auditFilters").addEventListener("submit", event => { event.preventDefault(); state.auditPage = 1; showError(""); loadAudit().catch(error => showError(error.message)); });
+  $("#auditOperation").addEventListener("change", () => { const operation = $("#auditOperation").value; if (operation) $("#auditType").value = ["announcement", "account", "export", "import"].includes(operation) ? operation : "submission"; state.auditPage = 1; showError(""); loadAudit().catch(error => showError(error.message)); });
   $("#resetAudit").addEventListener("click", () => { $("#auditFilters").reset(); state.auditPage = 1; showError(""); loadAudit().catch(error => showError(error.message)); });
   $("#refreshAudit").addEventListener("click", () => { showError(""); loadAudit().catch(error => showError(error.message)); });
   $("#refreshSubmissionHistory").addEventListener("click", loadSubmissionHistory);

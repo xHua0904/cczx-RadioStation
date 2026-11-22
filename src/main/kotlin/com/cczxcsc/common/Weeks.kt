@@ -1,11 +1,10 @@
-package com.cczxcsc
+package com.cczxcsc.common
 
+import com.cczxcsc.model.Period
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.temporal.TemporalAdjusters
 import java.time.temporal.WeekFields
-
-data class Period(val key: String, val label: String, val startDate: String, val endDate: String)
 
 object Weeks {
     fun key(date: LocalDate): String = "${date.get(WeekFields.ISO.weekBasedYear())}-W${date.get(WeekFields.ISO.weekOfWeekBasedYear()).toString().padStart(2, '0')}"

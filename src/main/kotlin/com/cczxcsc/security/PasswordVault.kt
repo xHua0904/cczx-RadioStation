@@ -1,7 +1,5 @@
-package com.cczxcsc
+package com.cczxcsc.security
 
-import org.springframework.beans.factory.annotation.Value
-import org.springframework.stereotype.Component
 import java.nio.file.FileAlreadyExistsException
 import java.nio.file.Files
 import java.nio.file.Path
@@ -11,6 +9,8 @@ import java.util.Base64
 import javax.crypto.Cipher
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
+import org.springframework.beans.factory.annotation.Value
+import org.springframework.stereotype.Component
 
 // 登录仍使用哈希；本机查询命令使用加密记录和数据目录中的独立密钥。
 @Component

@@ -1,4 +1,4 @@
-package com.cczxcsc
+package com.cczxcsc.security
 
 import java.security.MessageDigest
 import java.security.SecureRandom

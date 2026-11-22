@@ -1,5 +1,9 @@
 package com.cczxcsc
 
+import com.cczxcsc.dao.DatabaseInitializer
+import java.nio.file.Files
+import java.nio.file.Path
+import java.util.UUID
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import org.springframework.core.io.ClassPathResource
@@ -8,9 +12,6 @@ import org.springframework.jdbc.datasource.DataSourceTransactionManager
 import org.springframework.jdbc.datasource.init.ScriptUtils
 import org.springframework.transaction.support.TransactionTemplate
 import org.sqlite.SQLiteDataSource
-import java.nio.file.Files
-import java.nio.file.Path
-import java.util.UUID
 
 class SqliteMigrationTest {
     @Test fun `旧库升级保留投稿和密码并生成可恢复备份`() {

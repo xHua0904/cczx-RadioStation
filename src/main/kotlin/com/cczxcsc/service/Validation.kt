@@ -1,37 +1,13 @@
-package com.cczxcsc
+package com.cczxcsc.service
 
+import com.cczxcsc.common.ApiError
+import com.cczxcsc.common.SongRequestContent
+import com.cczxcsc.common.Weeks
+import com.cczxcsc.common.categories
+import com.cczxcsc.common.schoolClasses
+import com.cczxcsc.common.statuses
+import com.cczxcsc.model.SubmissionInput
 import java.time.LocalDate
-import java.time.OffsetDateTime
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
-
-val schoolZone: ZoneId = ZoneId.of("Asia/Shanghai")
-val categories = listOf("校园新闻", "美文朗读", "点歌祝福", "失物招领", "活动通知", "人物访谈", "英语角", "其他")
-val statuses = listOf("待审核", "已通过", "已播出", "已退稿")
-val adoptedStatuses = setOf("已通过", "已播出")
-val schoolClasses = (1..11).map { "高一${it}班" } + (1..9).map { "高二${it}班" }
-fun nowIso(): String = OffsetDateTime.now(schoolZone).withNano(0).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
-
-class ApiError(val status: Int, override val message: String) : RuntimeException(message)
-
-data class SubmissionInput(
-    val author: String = "", val className: String = "", val contact: String = "",
-    val category: String = "", val title: String = "", val content: String = "",
-    val songName: String = "", val artist: String = "", val songUrl: String = "",
-    val status: String = "待审核", val note: String = "", val period: String = "",
-    val message: String = "", val reason: String = ""
-)
-
-data class Submission(
-    val id: Long, val code: String, val author: String, val className: String,
-    val contact: String, val category: String, val title: String, val content: String,
-    val status: String, val broadcastDate: String, val note: String,
-    val source: String, val createdAt: String, val updatedAt: String,
-    val songName: String, val artist: String, val songUrl: String,
-    val period: String = "", val broadcastTime: String = "",
-    val reviewedBy: String = "", val scheduledBy: String = "", val updatedBy: String = "",
-    val message: String = "", val reason: String = "", val legacyContent: String = ""
-)
 
 object Validation {
     fun publicClass(value: String): String {

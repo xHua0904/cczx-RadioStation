@@ -1,19 +1,22 @@
-package com.cczxcsc
+package com.cczxcsc.service
 
-import org.springframework.beans.factory.annotation.Value
-import org.springframework.jdbc.core.JdbcTemplate
-import org.springframework.stereotype.Service
+import com.cczxcsc.common.nowIso
+import com.cczxcsc.dao.DatabaseDao
 import java.lang.management.ManagementFactory
 import java.net.Inet4Address
 import java.net.NetworkInterface
 import java.util.Collections
+import org.springframework.beans.factory.annotation.Value
+import org.springframework.stereotype.Service
 
 @Service
-class ServerInfoService(private val jdbc: JdbcTemplate, @Value("\${app.storage}") private val storage: String) {
+class ServerInfoService(private val database: DatabaseDao, @Value("\${app.storage}") private val storage: String) {
+    fun health(): Map<String, Any> {
+        database.latencyMs()
+        return mapOf("ok" to true, "time" to nowIso())
+    }
     fun info(): Map<String, Any> {
-        val started = System.nanoTime()
-        jdbc.queryForObject("SELECT 1", Int::class.java)
-        val latency = (System.nanoTime() - started) / 1_000_000.0
+        val latency = database.latencyMs()
         // 从本机网卡读取地址，优先显示局域网 IPv4，无需访问外部服务。
         val addresses = runCatching {
             Collections.list(NetworkInterface.getNetworkInterfaces())

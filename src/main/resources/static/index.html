@@ -14,6 +14,7 @@
 <header class="site-head"><div class="wrap head-inner"><a class="brand" href="index.html"><img src="img/logo.png" alt="长春中学校徽"><span class="brand-text"><strong>校园广播站</strong><em>长春中学</em></span></a><nav class="head-nav" aria-label="导航"><a class="ghost-link" href="admin.html">新媒体中心</a></nav></div></header>
 <main class="public-main">
   <div class="page-head"><div><span class="eyebrow">长春中学 · 校园广播</span><h1>把想听的歌，送到校园广播</h1><p>选择一首歌，也可以留下简短寄语和点播理由</p></div><span class="page-marker">点播申请</span></div>
+  <nav class="public-shortcuts" aria-label="投稿页快捷入口"><a class="text-button" href="#progressHeading">查询稿件进度</a><a class="text-button" href="#publicScheduleHeading">查看播放日程</a></nav>
   <div class="public-layout">
     <div class="card form-card" id="form">
       <div class="form-title"><h2 class="form-heading">提交点播</h2><span>标有 * 的项目为必填</span></div>
@@ -50,7 +51,7 @@
           </select></div>
         </div></fieldset>
         <fieldset class="form-section"><legend>点播信息</legend><div class="row-2">
-          <div class="field" data-field="song_name"><label for="song_name">点播歌曲名称<span class="req">*</span></label><input class="input" id="song_name" name="song_name" maxlength="80" placeholder="歌曲名称" required></div>
+          <div class="field" data-field="song_name"><label for="song_name">点播歌曲名称<span class="req">*</span></label><input class="input" id="song_name" name="song_name" maxlength="80" placeholder="歌曲名称" required><p id="songDuplicate" class="song-duplicate" role="status" hidden></p></div>
           <div class="field" data-field="artist"><label for="artist">歌手<span class="req">*</span></label><input class="input" id="artist" name="artist" maxlength="80" placeholder="歌手或演唱者" required></div>
         </div></fieldset>
         <fieldset class="form-section"><legend>想说的话<span class="section-optional">选填</span></legend><div class="row-2">
@@ -60,10 +61,23 @@
         <div class="field" data-field="contact"><label for="contact">联系方式<span class="opt">选填</span></label><input class="input" id="contact" name="contact" maxlength="50" placeholder="微信 / QQ / 手机号"></div>
         <div class="submit-row"><p class="form-tip">提交后由新媒体中心审核并安排播出</p><button class="btn btn-primary" type="submit" id="submitBtn" disabled><span id="submitLabel">提交点播</span></button></div>
       </form>
-      <div class="success" id="successPanel"><div class="success-mark" aria-hidden="true"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m5 12 4 4L19 6"/></svg></div><h3>点播已提交</h3><p>你的申请编号：<strong id="submissionCode"></strong></p><p>新媒体中心会查看这份申请，需要补充信息时会通过预留方式联系你</p><div class="actions"><button class="btn btn-ghost btn-sm" type="button" id="againBtn">再点播一首</button></div></div>
+      <div class="success" id="successPanel"><div class="success-mark" aria-hidden="true"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m5 12 4 4L19 6"/></svg></div><h3>点播已提交</h3><p>你的申请编号：<strong id="submissionCode"></strong></p><p>新媒体中心会查看这份申请，需要补充信息时会通过预留方式联系你</p><div class="actions"><button class="btn btn-ghost btn-sm" type="button" id="viewProgressBtn">查看稿件进度</button><button class="btn btn-ghost btn-sm" type="button" id="againBtn">再点播一首</button></div></div>
     </div>
     <aside class="announcement-board" aria-labelledby="announcementHeading">
       <section class="card request-preview" aria-labelledby="previewHeading"><div class="record-disc" aria-hidden="true"><span>广播</span></div><div class="preview-copy"><span class="eyebrow" id="previewHeading">本次点播</span><h2 id="previewSong">歌曲名称</h2><p id="previewArtist">歌手</p></div></section>
+      <section class="card public-progress" aria-labelledby="progressHeading">
+        <div class="card-heading"><h2 id="progressHeading">稿件进度</h2></div>
+        <form id="progressForm" novalidate><label for="progressQuery">姓名或稿件编号</label><div class="public-query-row"><input class="input" id="progressQuery" maxlength="40" placeholder="输入姓名或 GB 开头的编号" autocomplete="off" required><button class="btn btn-primary" id="progressSubmit" type="submit">查询</button></div></form>
+        <p id="progressHint" class="public-hint" role="status">自动识别姓名或编号，查看审核状态和播出安排</p>
+        <div id="progressResults" class="public-result-list" aria-live="polite"></div>
+        <div id="progressPager" class="public-pager" hidden><button class="text-button" id="progressPrevious" type="button">上一页</button><span id="progressPageInfo"></span><button class="text-button" id="progressNext" type="button">下一页</button></div>
+      </section>
+      <section class="card public-schedule" aria-labelledby="publicScheduleHeading">
+        <div class="card-heading"><h2 id="publicScheduleHeading">播放日程</h2><button class="text-button" id="refreshPublicSchedule" type="button">刷新</button></div>
+        <p class="public-hint">今天及之后已安排的校园广播</p>
+        <div id="publicSchedule" class="public-result-list" aria-live="polite"><p class="empty-state">正在加载播放日程…</p></div>
+        <div id="schedulePager" class="public-pager" hidden><button class="text-button" id="schedulePrevious" type="button">上一页</button><span id="schedulePageInfo"></span><button class="text-button" id="scheduleNext" type="button">下一页</button></div>
+      </section>
       <div class="board-heading"><div><span class="eyebrow">新媒体中心</span><h2 id="announcementHeading">公告栏</h2></div><span class="board-count" id="announcementCount">—</span></div>
       <div id="announcementFeed" class="announcement-feed" aria-live="polite"><p class="empty-state">正在加载公告…</p></div><button id="announcementRetry" class="btn btn-ghost btn-sm" type="button" hidden>重新加载公告</button>
     </aside>

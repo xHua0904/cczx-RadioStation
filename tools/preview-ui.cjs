@@ -22,16 +22,22 @@ let announcements = [{ id: 1, title: '本周校园点播开放', content: '选�
 let history = items.map(row => ({ id: row.id, username: '投稿人：' + row.author, action: '在线投稿', target_type: 'submission', target_id: String(row.id), target_label: row.code, created_at: time() }));
 const sessions = new Map();
 function audit(username, action, type, id, label) { history.unshift({ id: randomUUID(), username, action, target_type: type, target_id: String(id), target_label: label, created_at: time() }); }
+for (const row of items) {
+  if (row.reviewed_by) audit(row.reviewed_by, row.status === '已退稿' ? '退稿' : '审核通过', 'submission', row.id, row.code);
+  if (row.broadcast_date) audit(row.scheduled_by, '安排播出日程', 'submission', row.id, row.code);
+}
+const operationActions = { review: ['审核通过'], schedule: ['安排播出日程','移出日程'], reject: ['退稿'], reopen: ['重新提交审批'], played: [], note: ['修改备注'], delete: ['删除稿件'], announcement: ['发布公告','修改公告','删除公告'], account: [], export: ['导出稿件'], import: ['导入旧稿件'] };
+const pick = (row, keys) => Object.fromEntries(keys.map(key => [key, row[key]]));
 function filtered(params) {
   return items.filter(row => (!params.get('phase') || (params.get('phase') === 'pending' ? row.status === '待审核' : row.status !== '待审核'))
     && (!params.get('schedule') || (params.get('schedule') === 'unscheduled' ? !row.broadcast_date : row.broadcast_date && ['已通过', '已播出'].includes(row.status)))
     && (!params.get('status') || params.get('status') === row.status)
     && (!params.get('q') || [row.song_name, row.artist, row.author, row.class_name, row.code, row.message, row.reason].join(' ').includes(params.get('q'))));
 }
-function paged(rows, params) {
+function paged(rows, params, pageSize = 15) {
   const page = Math.max(1, Number(params.get('page')) || 1), counts = {};
   for (const row of rows) if (row.status) counts[row.status] = (counts[row.status] || 0) + 1;
-  return { items: rows.slice((page - 1) * 15, page * 15), page, pages: Math.max(1, Math.ceil(rows.length / 15)), total: rows.length, page_size: 15, counts };
+  return { items: rows.slice((page - 1) * pageSize, page * pageSize), page, pages: Math.max(1, Math.ceil(rows.length / pageSize)), total: rows.length, page_size: pageSize, counts };
 }
 function stats() {
   const counts = Object.fromEntries(statuses.map(s => [s, items.filter(row => row.status === s).length]));
@@ -79,6 +85,16 @@ const server = http.createServer(async (req, res) => {
     if (endpoint === '/api/meta') return send(res, { total: items.length, statuses });
     if (endpoint === '/api/announcements') return send(res, { items: announcements.filter(row => row.published) });
     if (endpoint === '/api/submissions' && method === 'POST') return send(res, create(input));
+    if (endpoint === '/api/submissions/progress' && method === 'POST') {
+      const query = (input.query || '').trim(), byCode = /^GB[0-9]+$/i.test(query);
+      const rows = items.filter(row => byCode ? row.code === query.toUpperCase() : row.author === query).map(row => pick(row, ['code','class_name','song_name','artist','status','broadcast_date','broadcast_time','created_at']));
+      return send(res, { ...paged(rows, new URLSearchParams({ page: String(input.page || 1) }), 10), input_type: byCode ? 'code' : 'name' });
+    }
+    if (endpoint === '/api/submissions/song-exists') return send(res, { exists: items.some(row => row.song_name.trim().toLowerCase() === (url.searchParams.get('song_name') || '').trim().toLowerCase()) });
+    if (endpoint === '/api/schedule') {
+      const rows = items.filter(row => row.broadcast_date >= today && ['已通过','已播出'].includes(row.status)).sort((a,b) => (a.broadcast_date + a.broadcast_time).localeCompare(b.broadcast_date + b.broadcast_time)).map(row => pick(row, ['song_name','artist','status','broadcast_date','broadcast_time']));
+      return send(res, paged(rows, url.searchParams, 20));
+    }
     if (endpoint === '/api/admin/login' && method === 'POST') {
       if (!input.username?.trim() || !input.password) return send(res, { error: '请填写预览账号和密码' }, 400);
       const token = randomUUID(); sessions.set(token, input.username.trim());
@@ -94,8 +110,9 @@ const server = http.createServer(async (req, res) => {
       time() + ' INFO  Application : 校园广播站已启动（示例日志）', time() + ' DEBUG Submission : 收到点播申请（示例日志）',
       time() + ' WARN  Submission : 请检查歌曲信息（示例日志）', time() + ' ERROR Network : 示例连接错误，用于查看高亮样式', '    at Example.preview(Example.java:12)' ] });
     if (endpoint === '/api/admin/audit') {
-      const rows = history.filter(row => (!url.searchParams.get('target_type') || row.target_type === url.searchParams.get('target_type')) && (!url.searchParams.get('target_id') || row.target_id === url.searchParams.get('target_id')) && (!url.searchParams.get('q') || [row.username, row.action, row.target_label].join(' ').includes(url.searchParams.get('q'))));
-      return send(res, paged(rows, url.searchParams));
+      const operation = url.searchParams.get('operation');
+      const rows = history.filter(row => !['在线投稿','手动登记'].includes(row.action) && (!operation || (operation === 'played' ? row.action.startsWith('切换播出状态：') : (operationActions[operation] || []).includes(row.action))) && (!url.searchParams.get('target_type') || row.target_type === url.searchParams.get('target_type')) && (!url.searchParams.get('target_id') || row.target_id === url.searchParams.get('target_id')) && (!url.searchParams.get('q') || [row.username, row.action, row.target_label].join(' ').includes(url.searchParams.get('q'))));
+      return send(res, paged(rows, url.searchParams, 20));
     }
     if (endpoint === '/api/admin/schedule') return send(res, { items: items.filter(row => row.broadcast_date && ['已通过', '已播出'].includes(row.status)) });
     if (endpoint === '/api/admin/review-summary') { const ids = items.filter(row => row.status === '待审核').map(row => row.id); return send(res, { count: ids.length, ids }); }
@@ -106,7 +123,7 @@ const server = http.createServer(async (req, res) => {
         if (action === 'schedule') { row.broadcast_date = input.broadcast_date; row.broadcast_time = input.broadcast_time || ''; row.scheduled_by = username; }
         else if (action === 'clear_schedule') { row.broadcast_date = row.broadcast_time = ''; row.scheduled_by = username; }
         else { row.status = ({ approve: '已通过', reject: '已退稿', played: '已播出', reopen: '待审核' })[action] || row.status; row.reviewed_by = username; }
-        row.note = input.note || row.note; row.updated_by = username; row.updated_at = time(); audit(username, '预览操作：' + action, 'submission', row.id, row.code);
+        row.note = input.note || row.note; row.updated_by = username; row.updated_at = time(); audit(username, ({ approve: '审核通过', reject: '退稿', schedule: '安排播出日程', played: '切换播出状态：已播出', clear_schedule: '移出日程', reopen: '重新提交审批' })[action], 'submission', row.id, row.code);
       }
       return send(res, { ok: true, updated: rows.length, remaining: items.filter(row => row.status === '待审核').length });
     }

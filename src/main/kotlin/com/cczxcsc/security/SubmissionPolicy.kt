@@ -1,9 +1,9 @@
-package com.cczxcsc
+package com.cczxcsc.security
 
 import jakarta.servlet.http.HttpServletRequest
+import java.net.InetAddress
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
-import java.net.InetAddress
 
 // 每个来源独立计数；并发检查与计数在同一锁内完成，容量满时保留已有窗口。
 class SubmissionRateLimiter(private val clock: () -> Long = { System.nanoTime() / 1_000_000 }, private val maxSources: Int = 10_000) {
@@ -66,9 +66,12 @@ class SubmissionSource(trustedProxies: String) {
 
 @Component
 class SubmissionPolicy(@Value("\${app.submissions-per-minute:20}") private val limit: Int,
-    @Value("\${app.trusted-proxies:}") trustedProxies: String) {
+    @Value("\${app.trusted-proxies:}") trustedProxies: String,
+    @Value("\${app.public-reads-per-minute:120}") private val readLimit: Int = 120) {
     private val limiter = SubmissionRateLimiter()
+    private val readLimiter = SubmissionRateLimiter()
     private val source = SubmissionSource(trustedProxies)
-    init { require(limit > 0) { "SUBMISSIONS_PER_MINUTE 必须大于 0" } }
+    init { require(limit > 0 && readLimit > 0) { "投稿和公开查询限额必须大于 0" } }
     fun retryAfter(request: HttpServletRequest): Int = limiter.retryAfter(source.address(request), limit)
+    fun readRetryAfter(request: HttpServletRequest): Int = readLimiter.retryAfter(source.address(request), readLimit)
 }
