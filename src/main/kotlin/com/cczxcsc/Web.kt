@@ -44,9 +44,10 @@ class WebConfig(private val auth: AuthService) : WebMvcConfigurer {
 class RequestLimits(private val json: ObjectMapper, private val submissions: SubmissionPolicy) : OncePerRequestFilter() {
     override fun doFilterInternal(request: HttpServletRequest, response: HttpServletResponse, chain: FilterChain) {
         response.setHeader("X-Content-Type-Options", "nosniff")
-        if (request.requestURI.startsWith("/api/")) response.setHeader("Cache-Control", "no-store")
         val path = request.servletPath.ifBlank { request.requestURI.removePrefix(request.contextPath) }
             .split('/').joinToString("/") { it.substringBefore(';') }
+        // 页面每次重新获取，构建时的资源版本参数负责让脚本与样式同步更新。
+        if (request.requestURI.startsWith("/api/") || path in setOf("", "/", "/admin") || path.endsWith(".html")) response.setHeader("Cache-Control", "no-store")
         if (request.method == "POST" && path == "/api/submissions") {
             val retry = submissions.retryAfter(request)
             if (retry > 0) {

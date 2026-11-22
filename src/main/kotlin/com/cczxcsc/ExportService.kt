@@ -15,10 +15,10 @@ data class ExportFile(val bytes: ByteArray, val contentType: String, val filenam
 class ExportService {
     fun export(items: List<Submission>, format: String): ExportFile {
         if (format !in setOf("csv", "xlsx")) throw ApiError(400, "导出格式应为 csv 或 xlsx")
-        val headers = listOf("编号", "投稿时间", "投稿人", "班级/部门", "标题", "投稿内容", "联系方式", "状态", "播出日期", "播出时间", "审核备注", "来源", "审稿人", "排期人", "最近操作人")
+        val headers = listOf("编号", "投稿时间", "投稿人", "班级/部门", "歌曲名称", "歌手", "简短寄语", "点播理由", "历史标题", "历史投稿正文", "联系方式", "状态", "播出日期", "播出时间", "审核备注", "来源", "审稿人", "排期人", "最近操作人")
         val rows: List<List<Any?>> = listOf(headers) + items.map {
-            listOf(it.code, it.createdAt.replace('T', ' ').take(16), it.author, it.className, it.title,
-                it.content, it.contact, it.status, it.broadcastDate, it.broadcastTime, it.note, it.source, it.reviewedBy, it.scheduledBy, it.updatedBy)
+            listOf(it.code, it.createdAt.replace('T', ' ').take(16), it.author, it.className, it.songName, it.artist, it.message, it.reason,
+                if (it.legacyContent.isNotBlank()) it.title else "", it.legacyContent, it.contact, it.status, it.broadcastDate, it.broadcastTime, it.note, it.source, it.reviewedBy, it.scheduledBy, it.updatedBy)
         }
         val stamp = LocalDateTime.now(schoolZone).format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmm"))
         if (format == "csv") {
@@ -47,7 +47,7 @@ class ExportService {
                     }
                 }
                 val columns = data.maxOfOrNull { it.size } ?: 1
-                for (column in 0 until columns) sheet.setColumnWidth(column, (if (column in setOf(5, 10)) 45 else 18) * 256)
+                for (column in 0 until columns) sheet.setColumnWidth(column, (if (column in setOf(6, 7, 9, 14)) 45 else 18) * 256)
                 sheet.createFreezePane(0, 1)
                 if (data.size > 1) sheet.setAutoFilter(CellRangeAddress(0, data.lastIndex, 0, columns - 1))
             }

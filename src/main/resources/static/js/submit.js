@@ -1,9 +1,9 @@
-/* 学生投稿与公告栏 */
+/* 学生点播与公告栏 */
 (() => {
   "use strict";
   const $ = (selector, root = document) => root.querySelector(selector);
   const form = $("#submitForm");
-  const content = $("#content");
+  const message = $("#message"), reason = $("#reason");
   const alert = $("#formAlert");
   const submit = $("#submitBtn");
 
@@ -27,14 +27,18 @@
   const rules = {
     author: v => v.length >= 2 ? "" : "请填写姓名（至少 2 个字）",
     class_name: v => /^高(?:一(?:[1-9]|1[01])|二[1-9])班$/.test(v) ? "" : "请选择班级（高一 1–11 班、高二 1–9 班）",
-    content: v => !v ? "投稿内容不能为空" : v.length > 100 ? "投稿内容不得超过 100 字" : "",
+    song_name: v => !v ? "请填写点播歌曲名称" : v.length > 80 ? "歌曲名称最多 80 字" : "",
+    artist: v => !v ? "请填写歌手" : v.length > 80 ? "歌手名称最多 80 字" : "",
+    message: v => v.length > 100 ? "简短寄语最多 100 字" : "",
+    reason: v => v.length > 300 ? "点播理由最多 300 字" : "",
     contact: () => ""
   };
   Object.keys(rules).forEach(name => form.elements[name].addEventListener("input", () => markField(name, rules[name](value(name)))));
-  content.addEventListener("input", () => {
-    $("#contentCounter").textContent = content.value.length + " / 100";
-    $("#contentCounter").classList.toggle("over", content.value.length > 100);
-  });
+  function updatePreview() { $("#previewSong").textContent = value("song_name") || "歌曲名称"; $("#previewArtist").textContent = value("artist") || "歌手"; }
+  for (const name of ["song_name", "artist"]) form.elements[name].addEventListener("input", updatePreview);
+  function updateCounter(name, limit) { const counter = $("#" + name + "Counter"); counter.textContent = form.elements[name].value.length + " / " + limit; counter.classList.toggle("over", form.elements[name].value.length > limit); }
+  message.addEventListener("input", () => updateCounter("message", 100));
+  reason.addEventListener("input", () => updateCounter("reason", 300));
   async function loadAnnouncements() {
     const feed = $("#announcementFeed");
     $("#announcementRetry").hidden = true;
@@ -63,14 +67,14 @@
     if (first) { showError("请检查标红的内容。"); form.elements[first].focus(); return; }
     submit.disabled = true; $("#submitLabel").textContent = "提交中…";
     try {
-      const payload = { author: value("author"), class_name: value("class_name"), content: value("content"), contact: value("contact") };
+      const payload = { author: value("author"), class_name: value("class_name"), song_name: value("song_name"), artist: value("artist"), message: value("message"), reason: value("reason"), contact: value("contact") };
       const data = await api("/api/submissions", { method: "POST", body: JSON.stringify(payload) });
       $("#submissionCode").textContent = data.code; form.hidden = true; $("#successPanel").classList.add("show"); alert.classList.remove("show");
     } catch (error) { showError(error.message); }
-    finally { submit.disabled = false; $("#submitLabel").textContent = "提交稿件"; }
+    finally { submit.disabled = false; $("#submitLabel").textContent = "提交点播"; }
   });
   $("#againBtn").addEventListener("click", () => {
-    form.reset(); content.value = ""; $("#contentCounter").textContent = "0 / 100";
+    form.reset(); updateCounter("message", 100); updateCounter("reason", 300); updatePreview();
     Object.keys(rules).forEach(name => markField(name, "")); alert.classList.remove("show"); $("#successPanel").classList.remove("show"); form.hidden = false;
   });
   $("#announcementRetry").addEventListener("click", loadAnnouncements);

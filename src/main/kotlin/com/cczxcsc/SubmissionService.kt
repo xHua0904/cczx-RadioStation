@@ -32,6 +32,7 @@ class SubmissionService(private val repo: SubmissionRepository, private val audi
         if (row.author != author.trim()) throw ApiError(404, "编号与姓名不匹配，请核对后再试")
         // 保留旧查询 API 兼容性，不返回联系方式或正文。
         return mapOf("code" to row.code, "author" to row.author, "title" to row.title, "category" to row.category,
+            "song_name" to row.songName, "artist" to row.artist,
             "status" to row.status, "note" to row.note, "broadcast_date" to row.broadcastDate,
             "created_at" to row.createdAt, "updated_at" to row.updatedAt,
             "period" to row.period, "broadcast_time" to row.broadcastTime)
